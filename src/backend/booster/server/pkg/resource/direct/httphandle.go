@@ -84,7 +84,7 @@ func (a *ResHTTPHandle) reportresource(req *restful.Request, resp *restful.Respo
 	}
 
 	// notify launch application
-	err = a.mgr.onResourceReport(task)
+	err = a.mgr.onResourceReport(task, nil)
 	if err != nil {
 		blog.Errorf("reportresource failed, url(%s): %v", req.Request.URL.String(), err)
 		ReturnRest(&RestResponse{Resp: resp, ErrCode: commonTypes.ServerErrReportResourceError, Message: err.Error()})

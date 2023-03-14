@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -32,6 +33,8 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/config"
 	register_discover "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/register-discover"
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 
 	localCommon "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/types"
@@ -54,12 +57,15 @@ const (
 )
 
 // NewManager ：to report resouce and manage local application
-func NewManager(conf *config.ServerConfig, rd register_discover.RegisterDiscover) (Manager, error) {
+func NewManager(conf *config.ServerConfig, rd register_discover.RegisterDiscover,
+	connMap map[string]*net.Conn) (Manager, error) {
+
 	o := &processManager{
-		client: httpclient.NewHTTPClient(),
-		rd:     rd,
-		conf:   conf,
-		agent:  &types.AgentInfo{},
+		client:  httpclient.NewHTTPClient(),
+		rd:      rd,
+		conf:    conf,
+		agent:   &types.AgentInfo{},
+		connMap: connMap,
 	}
 
 	if err := o.init(); err != nil {
@@ -83,6 +89,8 @@ type processManager struct {
 	agent *types.AgentInfo
 
 	usedresLock sync.RWMutex
+
+	connMap map[string]*net.Conn
 }
 
 // check whether application(s) are running, if existed, kill
@@ -319,7 +327,7 @@ func (o *processManager) start(pCtx context.Context) {
 			blog.Infof("clean shut down")
 			return
 		case <-resourceReportTick.C:
-			o.reportResource()
+			o.reportResourcekkk()
 		}
 	}
 }
@@ -755,6 +763,35 @@ func (o *processManager) reportResource() error {
 	}
 
 	blog.Infof("report resource: %s json: [%s]", o.serverURL, (string)(data))
+	return nil
+}
+
+func (o *processManager) reportResourcekkk() error {
+	blog.Infof("ReportResourcekkk for city[%s] ip[%s]...", o.conf.City, o.conf.LocalConfig.LocalIP)
+
+	o.updateTotalResCPU()
+
+	o.usedresLock.RLock()
+	var reportobj = types.ReportAgentResource{
+		AgentInfo: *o.agent,
+	}
+	o.usedresLock.RUnlock()
+
+	var data []byte
+	_ = codec.EncJSON(reportobj, &data)
+
+	conn, ok := o.connMap["reportresource"]
+	if !ok {
+		blog.Errorf("connection reportresource is not enable")
+		// to do :
+		return nil
+	}
+
+	err := wsutil.WriteClientMessage(*conn, ws.OpText, data)
+	if err != nil {
+		blog.Errorf("ReportResource write failed : %v", err)
+	}
+
 	return nil
 }
 

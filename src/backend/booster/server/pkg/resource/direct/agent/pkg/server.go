@@ -12,7 +12,6 @@ package pkg
 import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/api"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/types"
@@ -20,23 +19,32 @@ import (
 
 // FbAgent : fast build agent
 type FbAgent struct {
-	conf       *config.ServerConfig
-	httpServer *httpserver.HTTPServer
-	handle     *api.HTTPHandle
+	conf *config.ServerConfig
+	//httpServer *httpserver.HTTPServer
+	handle *api.HTTPHandle
+
+	websocketHandler *api.WebsocketHandler
 }
 
 // NewFbAgent : return fast build agent object
 func NewFbAgent(conf *config.ServerConfig) (*FbAgent, error) {
 	s := &FbAgent{conf: conf}
 
+	var err error
+	s.websocketHandler, err = api.NewWebsocketHandler(conf)
+	if err != nil {
+		blog.Errorf("new Fbagent failed, %v", err)
+		return nil, err
+	}
 	// Http server
-	s.httpServer = httpserver.NewHTTPServer(s.conf.Port, s.conf.Address, "")
+	/*kkk s.httpServer = httpserver.NewHTTPServer(s.conf.Port, s.conf.Address, "")
 	if s.conf.ServerCert.IsSSL {
 		s.httpServer.SetSSL(
 			s.conf.ServerCert.CAFile, s.conf.ServerCert.CertFile, s.conf.ServerCert.KeyFile, s.conf.ServerCert.CertPwd)
-	}
+	}*/
 
 	s.initConfig()
+
 	return s, nil
 }
 
@@ -47,15 +55,17 @@ func (server *FbAgent) initConfig() {
 
 // Start : start listen
 func (server *FbAgent) Start() error {
-	var err error
+	// kkk
+	/*var err error
 	server.handle, err = api.NewHTTPHandle(server.conf)
 	if server.handle == nil || err != nil {
 		return types.ErrInitHTTPHandle
 	}
 
 	server.httpServer.RegisterWebServer(api.PathV1, nil, server.handle.GetActions())
+	return server.httpServer.ListenAndServe()*/
 
-	return server.httpServer.ListenAndServe()
+	return server.websocketHandler.Start()
 }
 
 // Run brings up the server

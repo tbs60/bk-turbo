@@ -11,6 +11,7 @@ package api
 
 import (
 	"io/ioutil"
+	"net"
 	"net/http"
 	"time"
 
@@ -75,7 +76,7 @@ func (a *HTTPHandle) initObjects() error {
 		return err
 	}
 
-	a.mgr, err = manager.NewManager(a.conf, a.rd)
+	a.mgr, err = manager.NewManager(a.conf, a.rd, map[string]*net.Conn{})
 	if err != nil {
 		blog.Errorf("get new manager failed: %v", err)
 		return err

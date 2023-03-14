@@ -13,7 +13,9 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +30,8 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 )
 
 // const vars
@@ -135,6 +139,8 @@ type directResourceManager struct {
 	releaseCmds map[string]*Command
 
 	mysql MySQL
+
+	connPools socketConnPools
 }
 
 func (a *AgentInfo) getGOOS() string {
@@ -175,6 +181,7 @@ func NewResourceManager(conf *config.DirectResourceConfig, roleEvent types.RoleC
 		userAllocateds:        []*userAllocated{},
 		userBatchresCallbacks: []*userBatchresCallback{},
 		releaseCmds:           map[string]*Command{},
+		connPools:             socketConnPools{},
 	}, nil
 }
 
@@ -432,10 +439,18 @@ func (d *directResourceManager) executeCommand(userID string, ip string, resBatc
 	}
 
 	blog.Infof("drm: executeCommand: try to request %s json: [%s]", uri, jsonData)
+	/* kkk
 	if _, _, err = d.post(uri, nil, []byte(jsonData)); err != nil {
 		blog.Errorf("drm: executeCommand[%+v] failed: %v", cmd, err)
 		return err
+	}*/
+	cp, err := d.connPools.getConnPool("executecommand")
+	if err != nil {
+		blog.Errorf("drm: executeCommand[%+v] get conn failed: %v", cmd, err)
+		return err
 	}
+	err = wsutil.WriteServerMessage(*cp.pool[ip], ws.OpText, []byte(jsonData))
+
 	blog.Infof("drm: executeCommand: success to request %s json: [%s]", uri, jsonData)
 	return nil
 }
@@ -505,7 +520,7 @@ func (d *directResourceManager) listCommands(userID string, resBatchID string) (
 	return ress, nil
 }
 
-func (d *directResourceManager) onResourceReport(resource *ReportAgentResource) error {
+func (d *directResourceManager) onResourceReport(resource *ReportAgentResource, conn *net.Conn) error {
 	blog.Infof("drm: onResourceReport with cluster[%s] ip[%s]...", resource.Base.Cluster, resource.Base.IP)
 	d.resourceLock.Lock()
 
@@ -530,6 +545,20 @@ func (d *directResourceManager) onResourceReport(resource *ReportAgentResource) 
 	// // 更新到map中
 	d.resource[resource.Base.IP] = adjustedagentres
 	d.resourceLock.Unlock()
+
+	// update connection pool
+	cp, err := d.connPools.getConnPool("reportresource")
+	if err != nil {
+		blog.Errorf("drm: report resource failed to get conn map with err:%v", err)
+		return err
+	}
+	if _, ok := cp.pool["reportresource"]; !ok {
+		err = cp.Add(resource.Base.IP, conn)
+		if err != nil {
+			blog.Errorf("drm: report resource failed to get conn map with err:%v", err)
+			return err
+		}
+	}
 
 	// 记录到数据库中
 	go d.mysql.PutAgentResource(d.getAgentResourceRecord(adjustedagentres))
@@ -882,6 +911,7 @@ func (d *directResourceManager) resourceCheck() {
 
 	d.resourceLock.Lock()
 	allagent := []string{}
+	deleteAgentList := []string{}
 
 	for ip, agent := range d.resource {
 		blog.Infof("drm: check for ip [%s]", ip)
@@ -890,10 +920,15 @@ func (d *directResourceManager) resourceCheck() {
 		if time.Now().Unix()-agent.Update > AgentReportInterval*AgentReportTimeoutCounter {
 			blog.Infof("drm: found agent[%s:%d] timeout,delte it", agent.Agent.Base.IP, agent.Agent.Base.Port)
 			delete(d.resource, ip)
+			deleteAgentList = append(deleteAgentList, ip)
 			continue
 		}
 	}
 	d.resourceLock.Unlock()
+
+	for _, ip := range deleteAgentList {
+		d.connPools.poolsMap["reportresource"].Remove(ip)
+	}
 
 	// TODO : 对于已经分配的资源，需要加个最大使用时长，避免无限期被占用
 	// 先不处理，不确定具体业务会占用资源多长时间
@@ -966,25 +1001,85 @@ func (d *directResourceManager) startHTTPServer() error {
 
 	// 需要指定另外的配置项，针对agent上报的
 	// init Http server
-	d.server = httpserver.NewHTTPServer(d.conf.ListenPort, d.conf.ListenIP, "")
-	if d.conf.ServerCert.IsSSL {
-		d.server.SetSSL(
-			d.conf.ServerCert.CAFile, d.conf.ServerCert.CertFile, d.conf.ServerCert.KeyFile, d.conf.ServerCert.CertPwd)
-	}
+	/*
+		d.server = httpserver.NewHTTPServer(d.conf.ListenPort, d.conf.ListenIP, "")
+		if d.conf.ServerCert.IsSSL {
+			d.server.SetSSL(
+				d.conf.ServerCert.CAFile, d.conf.ServerCert.CertFile, d.conf.ServerCert.KeyFile, d.conf.ServerCert.CertPwd)
+		}
 
-	var err error
-	handle, err := NewResourceHTTPHandle(d.conf, d)
-	if handle == nil || err != nil {
-		return ErrInitHTTPHandle
-	}
+		var err error
+		handle, err := NewResourceHTTPHandle(d.conf, d)
+		if handle == nil || err != nil {
+			return ErrInitHTTPHandle
+		}
 
-	d.server.RegisterWebServer(PathV1, nil, handle.GetActions())
-	go d.server.ListenAndServe()
-
+		d.server.RegisterWebServer(PathV1, nil, handle.GetActions())
+		go d.server.ListenAndServe()
+	*/
+	d.registerWebsocket()
+	blog.Infof("kkk ready to listen (%s)", ":"+d.conf.ListenIP+":"+strconv.Itoa(int(d.conf.ListenPort)))
+	go http.ListenAndServe(d.conf.ListenIP+":"+strconv.Itoa(int(d.conf.ListenPort)), nil)
 	return nil
 }
 
 // -----------------------http server----------------------------
+
+func (d *directResourceManager) registerWebsocket() error {
+	http.HandleFunc("/api/executecommand", func(w http.ResponseWriter, r *http.Request) {
+		conn, _, _, err := ws.UpgradeHTTP(r, w)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		defer conn.Close()
+
+		executeHandle(conn)
+	})
+
+	http.HandleFunc("/api/reportresource", func(w http.ResponseWriter, r *http.Request) {
+		conn, _, _, err := ws.UpgradeHTTP(r, w)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		defer conn.Close()
+		blog.Infof("kkk get  a conn ")
+		reportHandle(conn, d)
+	})
+
+	return nil
+}
+
+func executeHandle(conn net.Conn) {
+	blog.Infof("kkk execute handle!")
+}
+
+func reportHandle(conn net.Conn, mgr *directResourceManager) {
+	blog.Errorf("kkk report handle!")
+	for {
+		data, _, err := wsutil.ReadClientData(conn)
+		if err != nil {
+			blog.Errorf("drm: reportHandler read failed:%v", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
+		var resource ReportAgentResource
+		err = codec.DecJSON(data, &resource)
+		if err != nil {
+			blog.Errorf("drm: reportHandler decode failed:%v", err)
+			continue
+		}
+
+		err = mgr.onResourceReport(&resource, &conn)
+		if err != nil {
+			blog.Errorf("drm: reportHandler report failed:%v", err)
+		}
+	}
+}
 
 type handleWithUser struct {
 	mgr    *directResourceManager

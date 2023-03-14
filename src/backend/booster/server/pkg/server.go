@@ -212,6 +212,7 @@ func (s *Server) waitDBReady() error {
 
 	if s.conf.DirectResourceConfig.Enable {
 		pwd, err := encrypt.DesDecryptFromBase([]byte(s.conf.DirectResourceConfig.MySQLPwd))
+		blog.Errorf("kkk %s", pwd)
 		if err != nil {
 			return fmt.Errorf("DirectResourceConfig decrypt db failed: %v", err)
 		}
@@ -879,27 +880,27 @@ func (s *Server) initDirectResourceManager(
 	if !conf.Enable {
 		return nil, nil
 	}
-
+	blog.Infof("kkk init drm 0")
 	// init direct resource manager here
 	roleEvent := make(chan types.RoleType, 1)
 	if err := registerDiscover.AddObserver(roleEvent); err != nil {
 		blog.Errorf("add register discover observer failed: %v", err)
 		return nil, err
 	}
-
+	blog.Infof("kkk init drm 1")
 	pwd, err := encrypt.DesDecryptFromBase([]byte(conf.MySQLPwd))
 	if err != nil {
 		blog.Errorf("init initDirectResourceManager, decode mysql pwd failed: %v", err)
 		return nil, err
 	}
 	conf.MySQLPwd = string(pwd)
-
+	blog.Infof("kkk init drm 2")
 	resourceManager, err := direct.NewResourceManager(conf, roleEvent)
 	if err != nil {
 		blog.Errorf("initDirectResourceManager failed: %v", err)
 		return nil, err
 	}
-
+	blog.Infof("kkk init drm 3")
 	go func() {
 		_ = resourceManager.Run()
 	}()
