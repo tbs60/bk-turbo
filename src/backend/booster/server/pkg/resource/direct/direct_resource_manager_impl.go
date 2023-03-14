@@ -1033,24 +1033,25 @@ func (d *directResourceManager) startHTTPServer() error {
 func (d *directResourceManager) registerWebsocket() error {
 	http.HandleFunc("/api/executecommand", func(w http.ResponseWriter, r *http.Request) {
 		conn, _, _, err := ws.UpgradeHTTP(r, w)
+		defer conn.Close()
+
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-
-		defer conn.Close()
 
 		executeHandle(conn)
 	})
 
 	http.HandleFunc("/api/reportresource", func(w http.ResponseWriter, r *http.Request) {
 		conn, _, _, err := ws.UpgradeHTTP(r, w)
+		defer conn.Close()
+
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		defer conn.Close()
 		blog.Infof("kkk get  a conn ")
 		reportHandle(conn, d)
 	})
@@ -1065,11 +1066,14 @@ func executeHandle(conn net.Conn) {
 func reportHandle(conn net.Conn, mgr *directResourceManager) {
 	blog.Errorf("kkk report handle!")
 	for {
-		data, _, err := wsutil.ReadClientData(conn)
+		data, op, err := wsutil.ReadClientData(conn)
+		if op == ws.OpContinuation || op == ws.OpClose {
+			blog.Errorf("drm: reportHandler quit with :%v", op)
+			break
+		}
 		if err != nil {
 			blog.Errorf("drm: reportHandler read failed:%v", err)
-			time.Sleep(10 * time.Second)
-			continue
+			break
 		}
 
 		var resource ReportAgentResource
@@ -1084,6 +1088,7 @@ func reportHandle(conn net.Conn, mgr *directResourceManager) {
 			blog.Errorf("drm: reportHandler report failed:%v", err)
 		}
 	}
+	blog.Errorf("kkk report handle finish!")
 }
 
 type handleWithUser struct {

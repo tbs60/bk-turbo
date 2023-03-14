@@ -180,11 +180,14 @@ func listenExecuteCommand(ctx context.Context, conn *net.Conn, ch chan<- *types.
 		case <-ctx.Done():
 			return
 		default:
-			data, _, err := wsutil.ReadServerData(*conn)
+			data, op, err := wsutil.ReadServerData(*conn)
+			if op == ws.OpContinuation {
+				blog.Errorf("drm: executeHandler quit with :%v", op)
+				return
+			}
 			if err != nil {
 				blog.Errorf("execute command : get server data failed with err: %v", err)
-				time.Sleep(15 * time.Second)
-				continue
+				return
 			}
 
 			var cmd types.NotifyAgentData

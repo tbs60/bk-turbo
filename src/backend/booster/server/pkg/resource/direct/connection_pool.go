@@ -65,6 +65,7 @@ func (cp *connPool) Remove(agentIP string) error {
 	if !ok {
 		return errors.New(fmt.Sprintf("%s map has no conn for (%s)", cp.usage, agentIP))
 	}
+
 	delete(cp.pool, agentIP)
 	return nil
 }
