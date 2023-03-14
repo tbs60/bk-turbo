@@ -5,10 +5,27 @@ import (
 	"fmt"
 	"net"
 	"sync"
+
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 type socketConnPools struct {
 	poolsMap map[string]*connPool
+}
+
+func NewSocketConnPools(usages []string) *socketConnPools {
+	if len(usages) < 1 {
+		blog.Errorf("new socket conn pools failed,no usages list")
+		return nil
+	}
+	scp := make(map[string]*connPool)
+	for _, usage := range usages {
+		scp[usage] = &connPool{
+			usage: usage,
+			pool:  make(map[string]*net.Conn),
+		}
+	}
+	return &socketConnPools{poolsMap: scp}
 }
 
 func (p *socketConnPools) getConnPool(usage string) (*connPool, error) {

@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/metric/controllers"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
+	localCommon "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
@@ -140,7 +141,7 @@ type directResourceManager struct {
 
 	mysql MySQL
 
-	connPools socketConnPools
+	connPools *socketConnPools
 }
 
 func (a *AgentInfo) getGOOS() string {
@@ -170,6 +171,10 @@ func NewResourceManager(conf *config.DirectResourceConfig, roleEvent types.RoleC
 		return nil, err
 	}
 
+	connUsages := []string{
+		localCommon.ExecuteCommand,
+		localCommon.ReportResource,
+	}
 	return &directResourceManager{
 		conf:                  conf,
 		mysql:                 mysql,
@@ -181,7 +186,7 @@ func NewResourceManager(conf *config.DirectResourceConfig, roleEvent types.RoleC
 		userAllocateds:        []*userAllocated{},
 		userBatchresCallbacks: []*userBatchresCallback{},
 		releaseCmds:           map[string]*Command{},
-		connPools:             socketConnPools{},
+		connPools:             NewSocketConnPools(connUsages),
 	}, nil
 }
 
@@ -444,7 +449,7 @@ func (d *directResourceManager) executeCommand(userID string, ip string, resBatc
 		blog.Errorf("drm: executeCommand[%+v] failed: %v", cmd, err)
 		return err
 	}*/
-	cp, err := d.connPools.getConnPool("executecommand")
+	cp, err := d.connPools.getConnPool(localCommon.ExecuteCommand)
 	if err != nil {
 		blog.Errorf("drm: executeCommand[%+v] get conn failed: %v", cmd, err)
 		return err
@@ -547,12 +552,12 @@ func (d *directResourceManager) onResourceReport(resource *ReportAgentResource, 
 	d.resourceLock.Unlock()
 
 	// update connection pool
-	cp, err := d.connPools.getConnPool("reportresource")
+	cp, err := d.connPools.getConnPool(localCommon.ReportResource)
 	if err != nil {
 		blog.Errorf("drm: report resource failed to get conn map with err:%v", err)
 		return err
 	}
-	if _, ok := cp.pool["reportresource"]; !ok {
+	if _, ok := cp.pool[localCommon.ReportResource]; !ok {
 		err = cp.Add(resource.Base.IP, conn)
 		if err != nil {
 			blog.Errorf("drm: report resource failed to get conn map with err:%v", err)
@@ -927,7 +932,7 @@ func (d *directResourceManager) resourceCheck() {
 	d.resourceLock.Unlock()
 
 	for _, ip := range deleteAgentList {
-		d.connPools.poolsMap["reportresource"].Remove(ip)
+		d.connPools.poolsMap[localCommon.ReportResource].Remove(ip)
 	}
 
 	// TODO : 对于已经分配的资源，需要加个最大使用时长，避免无限期被占用

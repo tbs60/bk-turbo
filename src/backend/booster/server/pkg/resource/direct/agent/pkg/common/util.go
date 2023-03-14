@@ -23,6 +23,9 @@ import (
 
 const (
 	LocalIPKKey = "BK_DISTCC_LOCAL_IP"
+
+	ExecuteCommand = "executecommand"
+	ReportResource = "reportresource"
 )
 
 var (

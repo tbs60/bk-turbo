@@ -27,15 +27,13 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/types"
 	"github.com/shirou/gopsutil/process"
 
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/common"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 )
 
 // define vars
 var (
-	ExecuteCommand = "executecommand"
-	ReportResource = "reportresource"
-
 	TbsServerHost     = command.ProdBuildBoosterServerHost
 	TestTbsServerHost = command.TestBuildBoosterServerHost
 
@@ -72,8 +70,8 @@ func NewWebsocketHandler(conf *config.ServerConfig) (*WebsocketHandler, error) {
 
 func (h *WebsocketHandler) init() error {
 	h.usage = []string{
-		ExecuteCommand,
-		ReportResource,
+		common.ExecuteCommand,
+		common.ReportResource,
 	}
 
 	err := h.initConnection()
@@ -137,9 +135,9 @@ func (h *WebsocketHandler) Start() error {
 
 func (h *WebsocketHandler) handle(ctx context.Context, usage string, conn *net.Conn) {
 	switch usage {
-	case ReportResource:
+	case common.ReportResource:
 		h.handleReportResource(ctx, conn)
-	case ExecuteCommand:
+	case common.ExecuteCommand:
 		h.handleExecuteCommand(ctx, conn)
 	default:
 		blog.Errorf("unknown conn usage : %s", usage)

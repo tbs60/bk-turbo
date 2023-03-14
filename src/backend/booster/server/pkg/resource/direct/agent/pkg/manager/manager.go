@@ -780,7 +780,7 @@ func (o *processManager) reportResourcekkk() error {
 	var data []byte
 	_ = codec.EncJSON(reportobj, &data)
 
-	conn, ok := o.connMap["reportresource"]
+	conn, ok := o.connMap[localCommon.ReportResource]
 	if !ok {
 		blog.Errorf("connection reportresource is not enable")
 		// to do :
