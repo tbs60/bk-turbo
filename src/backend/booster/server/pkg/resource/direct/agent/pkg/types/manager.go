@@ -46,6 +46,7 @@ type AllocateServerResourceType struct {
 // ReportAgentResource : struct of report resource
 type ReportAgentResource struct {
 	AgentInfo
+	WorkerReady bool `json:"worker_ready"`
 }
 
 // define cmd type
@@ -132,6 +133,7 @@ type AgentBase struct {
 	Message string            `json:"message"`
 	Cluster string            `json:"cluster"`
 	Labels  map[string]string `json:"labels"`
+	User    string            `json:"user"`
 }
 
 // AgentInfo : agent info

@@ -51,6 +51,7 @@ const (
 
 const (
 	queueNameHeaderSymbol = "://"
+	directQueuePrefix     = "direct_"
 
 	workerMacLauncherName = "start.sh"
 	workerWinLauncherName = "start.bat"
@@ -70,8 +71,8 @@ const (
 type queueNameHeader string
 
 const (
-	queueNameHeaderDirectMac  queueNameHeader = "MAC"
-	queueNameHeaderDirectWin  queueNameHeader = "WIN"
+	queueNameHeaderDirectMac  queueNameHeader = "direct_MAC"
+	queueNameHeaderDirectWin  queueNameHeader = "direct_WIN"
 	queueNameHeaderK8SWin     queueNameHeader = "K8S_WIN"
 	queueNameHeaderK8SDefault queueNameHeader = "K8S"
 	queueNameHeaderVMMac      queueNameHeader = "VM_MAC"
@@ -522,22 +523,24 @@ func (de *disttaskEngine) launchTask(tb *engine.TaskBasic, queueName string) err
 	}
 
 	if matchDirectResource(queueName) {
+		blog.Infof("kkk %s   %s is direct queue", tb.ID, queueName)
 		return de.launchDirectTask(task, tb, queueName)
 	}
-
+	blog.Infof("kkk %s   %s is crm queue", tb.ID, queueName)
 	return de.launchCRMTask(task, tb, queueName)
 }
 
 func (de *disttaskEngine) launchDirectTask(task *distTask, tb *engine.TaskBasic, queueName string) error {
 	condition := &resourceCondition{
-		queueName: getQueueNamePure(queueName),
+		queueName: queueName,
 		leastCPU:  task.InheritSetting.LeastCPU,
 		maxCPU:    task.InheritSetting.RequestCPU,
 	}
-
+	blog.Infof("kkk ready to get free resource cond(%v)", condition)
 	_, err := de.directMgr.GetFreeResource(tb.ID, condition, resourceSelector, nil)
 	// add task into public queue
 	if err == engine.ErrorNoEnoughResources {
+		blog.Errorf("kkk get resource for task(%s) failed :%v  ,condi:()", tb.ID, err, condition)
 		if publicQueue := de.getPublicQueueByQueueName(queueName); publicQueue != nil &&
 			de.canGiveToPublicQueue(queueName) {
 			publicQueue.Add(tb)
@@ -715,6 +718,8 @@ func (de *disttaskEngine) launchDirectDone(task *distTask) (bool, error) {
 		return false, err
 	}
 
+	blog.Infof("kkk : get infolist : [%v]", infoList)
+
 	workerList := make([]taskWorker, 0, 100)
 	for _, info := range infoList {
 		switch info.Status {
@@ -737,6 +742,8 @@ func (de *disttaskEngine) launchDirectDone(task *distTask) (bool, error) {
 		blog.Error("engine(%s) try list resources of task(%s) failed: %v", EngineName, task.ID, err)
 		return false, err
 	}
+
+	blog.Infof("kkk : get resource list : [%v]", resourceList)
 
 	var cpuTotal, memTotal float64 = 0, 0
 	for _, r := range resourceList {
@@ -1273,12 +1280,16 @@ func getPlatform(queueName string) string {
 }
 
 func matchDirectResource(queueName string) bool {
-	switch getQueueNameHeader(queueName) {
+	if strings.HasPrefix(queueName, directQueuePrefix) {
+		return true
+	}
+	return false
+	/*switch getQueueNameHeader(queueName) {
 	case queueNameHeaderDirectWin, queueNameHeaderDirectMac:
 		return true
 	default:
 		return false
-	}
+	}*/
 }
 
 func getDirectLaunchCommand(queueName string) string {
@@ -1355,6 +1366,7 @@ func resourceSelector(
 	freeAgent []*respack.AgentResourceExternal,
 	condition interface{}) ([]*respack.AgentResourceExternal, error) {
 	if freeAgent == nil || len(freeAgent) == 0 {
+		blog.Infof("kkk  no enough resource!!! (%v)", freeAgent == nil)
 		return nil, engine.ErrorNoEnoughResources
 	}
 
@@ -1370,7 +1382,7 @@ func resourceSelector(
 	var cpuTotal float64 = 0
 	r := make([]*respack.AgentResourceExternal, 0, 100)
 	for _, agent := range freeAgent {
-		blog.Debugf("engine(%s) try to check free agent(%s:%.2f) with cluster(%s), "+
+		blog.Infof("engine(%s) try to check free agent(%s:%.2f) with cluster(%s), "+
 			"current cpu(%.2f) with queue(%s)",
 			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.queueName)
 
@@ -1388,7 +1400,7 @@ func resourceSelector(
 
 		cpuTotal += agent.Resource.CPU
 		r = append(r, agent)
-		blog.Debugf("engine(%s) select free agent(%s:%.2f) with cluster(%s), current(%.2f), target(%.2f~%.2f)",
+		blog.Infof("engine(%s) select free agent(%s:%.2f) with cluster(%s), current(%.2f), target(%.2f~%.2f)",
 			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.leastCPU, c.maxCPU)
 	}
 

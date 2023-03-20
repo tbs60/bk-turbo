@@ -61,11 +61,12 @@ func (cp *connPool) Remove(agentIP string) error {
 	cp.poolLock.Lock()
 	defer cp.poolLock.Unlock()
 
-	_, ok := cp.pool[agentIP]
+	conn, ok := cp.pool[agentIP]
 	if !ok {
 		return errors.New(fmt.Sprintf("%s map has no conn for (%s)", cp.usage, agentIP))
 	}
 
+	(*conn).Close()
 	delete(cp.pool, agentIP)
 	return nil
 }

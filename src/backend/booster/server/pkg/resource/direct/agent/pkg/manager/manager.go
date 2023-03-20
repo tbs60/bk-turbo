@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -45,6 +46,8 @@ type Manager interface {
 	ReportResource() error
 	ExecuteCommand(res *types.NotifyAgentData) error
 	// TODO : 缺少通知agent资源分配和释放的命令，先简单按资源独占处理
+	Clean() error
+
 	Run() error
 }
 
@@ -170,7 +173,9 @@ func (o *processManager) ExecuteCommand(res *types.NotifyAgentData) error {
 		o.addCommand(res.UserID, res.ResBatchID, command)
 
 		// ++ by tomtian 20190422, to report result immediately
-		go o.reportResource()
+		// kkk
+		//go o.reportResource()
+		go o.reportResourcekkk()
 		// --
 
 		return nil
@@ -678,6 +683,7 @@ func (o *processManager) initLocalIP() error {
 
 func (o *processManager) initBaseInfo() error {
 	blog.Infof("initBaseInfo for city[%s] ip[%s] os[%s]...", o.conf.City, o.conf.LocalConfig.LocalIP, runtime.GOOS)
+
 	o.agent.Base = types.AgentBase{
 		IP:      o.conf.LocalConfig.LocalIP,
 		Port:    int(o.conf.Port),
@@ -686,6 +692,14 @@ func (o *processManager) initBaseInfo() error {
 		Labels: map[string]string{
 			LabelKeyGOOS: runtime.GOOS,
 		},
+	}
+
+	u, err := user.Current()
+	if err != nil {
+		blog.Warnf("initBaseInfo: get user failed: %v", err)
+	}
+	if u != nil {
+		o.agent.Base.User = u.Username
 	}
 
 	return nil
@@ -771,9 +785,12 @@ func (o *processManager) reportResourcekkk() error {
 
 	o.updateTotalResCPU()
 
+	workerReady := o.detectWorker()
+
 	o.usedresLock.RLock()
 	var reportobj = types.ReportAgentResource{
-		AgentInfo: *o.agent,
+		AgentInfo:   *o.agent,
+		WorkerReady: workerReady,
 	}
 	o.usedresLock.RUnlock()
 
@@ -814,6 +831,60 @@ func (o *processManager) updateTotalResCPU() error {
 	}
 
 	return err
+}
+
+func (o *processManager) detectWorker() bool {
+	res := false
+	if runtime.GOOS == LabelValueGOOSWindows {
+		res = o.detectWinWorker()
+	} else if runtime.GOOS == LabelValueGOOSDarwin {
+		res = o.detectMacWorker()
+	}
+
+	return res
+}
+
+func (o *processManager) detectWinWorker() bool {
+	// kkk just support direct worker
+	output, err := execCmd("tasklist")
+	if err != nil {
+		blog.Errorf("detect worker failed: %v", err)
+		return false
+	}
+
+	if strings.Contains(string(output), "bk-dist-worker.exe") {
+		return true
+	}
+	return false
+}
+
+func (o *processManager) detectMacWorker() bool {
+
+	return false
+}
+
+func (o *processManager) Clean() error {
+	var err error
+	if runtime.GOOS == LabelValueGOOSWindows {
+		err = o.killWinWorker()
+	} else if runtime.GOOS == LabelValueGOOSDarwin {
+		err = o.killMacWorker()
+	}
+	return err
+}
+
+func (o *processManager) killWinWorker() error {
+	_, err := execCmd("taskkill /f /fi \"imagename eq bk-dist-worker.exe\"")
+	if err != nil {
+		blog.Errorf("kill worker failed: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (o *processManager) killMacWorker() error {
+
+	return nil
 }
 
 func (o *processManager) query(uri string, header http.Header) (resp *commonHttp.APIResponse, raw []byte, err error) {
@@ -890,4 +961,13 @@ func (o *processManager) getHeader(clusterID string) http.Header {
 	header := http.Header{}
 	header.Set("BCS-ClusterID", clusterID)
 	return header
+}
+
+func execCmd(cmd string) ([]byte, error) {
+	c := exec.Command(cmd)
+	output, err := c.Output()
+	if err != nil {
+		return []byte{}, err
+	}
+	return output, nil
 }

@@ -12,6 +12,7 @@ package direct
 import (
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -67,6 +68,7 @@ var (
 // ReportAgentResource : struct of report resource
 type ReportAgentResource struct {
 	AgentInfo
+	WorkerReady bool `json:"worker_ready"`
 }
 
 // NotifyAgentData : struct to notify agent
@@ -94,7 +96,8 @@ type NotifyAgentData struct {
 type oneagentResource struct {
 	Agent AgentInfo
 	// last report time, time.Now().Unix()
-	Update int64
+	Update      int64
+	WorkerReady bool
 }
 
 type allocatedResource struct {
@@ -223,6 +226,10 @@ func (d *directResourceManager) RegisterUser(userID string, releaseCmd *Command)
 	}, nil
 }
 
+func (d *directResourceManager) getConnPool() *socketConnPools {
+	return d.connPools
+}
+
 func (d *directResourceManager) getUserAllocated(userID string) *userAllocated {
 	blog.Infof("drm: getUserAllocated with userID[%s]", userID)
 
@@ -270,6 +277,11 @@ func (d *directResourceManager) getFreeResource(
 	if err != nil {
 		blog.Errorf("drm: failed to getAllFreeResource with userID(%s) for [%v]", userID, err)
 		return nil, err
+	}
+	if len(allfreeres) < 1 {
+		blog.Infof("kkk no free resource")
+	} else {
+		blog.Infof("kkk  free resource:(%v)", allfreeres[0].Resource)
 	}
 
 	res, err := callbackSelector(allfreeres, condition)
@@ -454,7 +466,12 @@ func (d *directResourceManager) executeCommand(userID string, ip string, resBatc
 		blog.Errorf("drm: executeCommand[%+v] get conn failed: %v", cmd, err)
 		return err
 	}
-	err = wsutil.WriteServerMessage(*cp.pool[ip], ws.OpText, []byte(jsonData))
+	conn, ok := cp.pool[ip]
+	if !ok {
+		blog.Errorf("drm: executeCommand[%+v] execute conn is lost: %v", cmd, err)
+		return err
+	}
+	err = wsutil.WriteServerMessage(*conn, ws.OpText, []byte(jsonData))
 
 	blog.Infof("drm: executeCommand: success to request %s json: [%s]", uri, jsonData)
 	return nil
@@ -505,7 +522,7 @@ func (d *directResourceManager) listCommands(userID string, resBatchID string) (
 
 	var ress []*CommandResultInfo
 	d.resourceLock.RLock()
-	for _, v := range d.resource {
+	/*for _, v := range d.resource {
 		for _, r := range v.Agent.Allocated {
 			if r.UserID == userID && r.ResBatchID == resBatchID {
 				for _, c := range r.Commands {
@@ -519,14 +536,42 @@ func (d *directResourceManager) listCommands(userID string, resBatchID string) (
 				}
 			}
 		}
+	}*/
+
+	for _, v := range d.userAllocateds {
+		if v.userID != userID {
+			continue
+		}
+		res, ok := v.allocated[resBatchID]
+		if !ok {
+			blog.Errorf("drm: task (%s) have no allocated resource", resBatchID)
+			return ress, nil
+		}
+
+		for _, r := range res {
+			ress = append(ress, &CommandResultInfo{
+				IP:     r.resource.Base.IP,
+				Status: CommandStatusSucceed,
+			})
+			blog.Infof("kkk agent(%s) worker ready: %v", r.resource.Base.IP, d.ifWorkerReady(r.resource.Base.IP, resBatchID))
+		}
+
 	}
+
 	d.resourceLock.RUnlock()
 
 	return ress, nil
 }
 
+func (d *directResourceManager) ifWorkerReady(agentIP string, resBatchID string) bool {
+	if v, ok := d.resource[resBatchID]; ok {
+		return v.WorkerReady
+	}
+	return false
+}
+
 func (d *directResourceManager) onResourceReport(resource *ReportAgentResource, conn *net.Conn) error {
-	blog.Infof("drm: onResourceReport with cluster[%s] ip[%s]...", resource.Base.Cluster, resource.Base.IP)
+	blog.Infof("drm: onResourceReport with cluster[%s] ip[%s] workerReady[%v]...", resource.Base.Cluster, resource.Base.IP, resource.WorkerReady)
 	d.resourceLock.Lock()
 
 	if !d.isMaster {
@@ -552,18 +597,19 @@ func (d *directResourceManager) onResourceReport(resource *ReportAgentResource, 
 	d.resourceLock.Unlock()
 
 	// update connection pool
-	cp, err := d.connPools.getConnPool(localCommon.ReportResource)
-	if err != nil {
-		blog.Errorf("drm: report resource failed to get conn map with err:%v", err)
-		return err
-	}
-	if _, ok := cp.pool[localCommon.ReportResource]; !ok {
-		err = cp.Add(resource.Base.IP, conn)
+	/*
+		cp, err := d.connPools.getConnPool(localCommon.ReportResource)
 		if err != nil {
 			blog.Errorf("drm: report resource failed to get conn map with err:%v", err)
 			return err
 		}
-	}
+		if _, ok := cp.pool[resource.Base.IP]; !ok {
+			err = cp.Add(resource.Base.IP, conn)
+			if err != nil {
+				blog.Errorf("drm: report resource failed to get conn map with err:%v", err)
+				return err
+			}
+		}*/
 
 	// 记录到数据库中
 	go d.mysql.PutAgentResource(d.getAgentResourceRecord(adjustedagentres))
@@ -822,11 +868,14 @@ func (d *directResourceManager) decAllocatedResource(userID string, allocated []
 // 3. update free resource, to dec resource in tasks
 func (d *directResourceManager) getAndUpdate(resource *ReportAgentResource) (*oneagentResource, error) {
 	var oneagentres = oneagentResource{
-		Agent:  resource.AgentInfo,
-		Update: time.Now().Unix(),
+		Agent:       resource.AgentInfo,
+		Update:      time.Now().Unix(),
+		WorkerReady: false,
 	}
 
+	// kkk
 	oneagentres.Agent.Free = oneagentres.Agent.Total
+	oneagentres.WorkerReady = resource.WorkerReady
 
 	// 减去agent侧已经占用的资源
 	var oktaskid = make(map[string]string, 100)
@@ -933,6 +982,7 @@ func (d *directResourceManager) resourceCheck() {
 
 	for _, ip := range deleteAgentList {
 		d.connPools.poolsMap[localCommon.ReportResource].Remove(ip)
+		d.connPools.poolsMap[localCommon.ExecuteCommand].Remove(ip)
 	}
 
 	// TODO : 对于已经分配的资源，需要加个最大使用时长，避免无限期被占用
@@ -1040,7 +1090,7 @@ func (d *directResourceManager) registerWebsocket() error {
 			return
 		}
 
-		executeHandle(conn)
+		executeHandle(conn, d)
 	})
 
 	http.HandleFunc("/api/reportresource", func(w http.ResponseWriter, r *http.Request) {
@@ -1052,28 +1102,69 @@ func (d *directResourceManager) registerWebsocket() error {
 			return
 		}
 
-		blog.Infof("kkk get  a conn ")
 		reportHandle(conn, d)
 	})
 
 	return nil
 }
 
-func executeHandle(conn net.Conn) {
-	blog.Infof("kkk execute handle!")
+func executeHandle(conn net.Conn, mgr *directResourceManager) {
+	remoteIP := conn.RemoteAddr().(*net.TCPAddr).IP
+	blog.Infof("kkk execute handle from %s!", remoteIP.String())
+	cp, err := mgr.connPools.getConnPool(localCommon.ExecuteCommand)
+	if err != nil {
+		blog.Errorf("execute handler err: %v", err)
+	}
+	cp.Add(remoteIP.String(), &conn)
+
+	for {
+		data, op, err := wsutil.ReadClientData(conn)
+
+		if op == ws.OpClose || err == io.EOF {
+			blog.Errorf("execute handler: conn between (%s) is closed", remoteIP)
+			break
+		}
+		if op == ws.OpContinuation {
+			//blog.Errorf("drm: executeHandler quit with :%v", op)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		if err != nil {
+			blog.Warnf("report resource handler: read client data failed: %v", err)
+			continue
+		}
+
+		if len(data) > 0 {
+			blog.Infof("kkk executeHandler got (%v)", string(data))
+			break
+		}
+	}
 }
 
 func reportHandle(conn net.Conn, mgr *directResourceManager) {
-	blog.Errorf("kkk report handle!")
+	remoteIP := conn.RemoteAddr().(*net.TCPAddr).IP
+	blog.Infof("kkk report handle from %s!", remoteIP.String())
+	cp, err := mgr.connPools.getConnPool(localCommon.ReportResource)
+	if err != nil {
+		blog.Errorf("execute handler err: %v", err)
+	}
+	cp.Add(remoteIP.String(), &conn)
+
 	for {
 		data, op, err := wsutil.ReadClientData(conn)
-		if op == ws.OpContinuation || op == ws.OpClose {
-			blog.Errorf("drm: reportHandler quit with :%v", op)
+
+		if op == ws.OpClose || err == io.EOF {
+			blog.Errorf("report resource handler: conn between (%s) is closed", remoteIP)
 			break
 		}
+		if op == ws.OpContinuation {
+			blog.Errorf("drm: reportHandler quit with :%v", op)
+			time.Sleep(2 * time.Second)
+			continue
+		}
 		if err != nil {
-			blog.Errorf("drm: reportHandler read failed:%v", err)
-			break
+			blog.Warnf("report resource handler: read client data failed: %v", err)
+			continue
 		}
 
 		var resource ReportAgentResource
@@ -1082,6 +1173,9 @@ func reportHandle(conn net.Conn, mgr *directResourceManager) {
 			blog.Errorf("drm: reportHandler decode failed:%v", err)
 			continue
 		}
+
+		// TODO : 获取agent 内网ip
+		resource.AgentInfo.Base.IP = remoteIP.String()
 
 		err = mgr.onResourceReport(&resource, &conn)
 		if err != nil {

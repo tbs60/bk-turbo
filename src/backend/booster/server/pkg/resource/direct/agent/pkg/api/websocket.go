@@ -12,6 +12,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -117,7 +118,7 @@ func (h *WebsocketHandler) initMgr() error {
 
 func (h *WebsocketHandler) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
-	go sysSignalHandler(cancel)
+	go sysSignalHandler(cancel, h)
 
 	for usage, conn := range h.ConnectionMap {
 		if conn != nil {
@@ -174,6 +175,22 @@ func (h *WebsocketHandler) handleExecuteCommand(ctx context.Context, conn *net.C
 	}
 }
 
+func (h *WebsocketHandler) clean() {
+	// close conn
+	for usage, conn := range h.ConnectionMap {
+		blog.Infof("agent quit , %s conn ready closed", usage)
+		(*conn).Close()
+	}
+
+	// release resouce
+	err := h.mgr.Clean()
+	if err != nil {
+		blog.Errorf("clean failed before agent quit: %v", err)
+	}
+
+	// kkk 是否通知客户端
+}
+
 func listenExecuteCommand(ctx context.Context, conn *net.Conn, ch chan<- *types.NotifyAgentData) {
 	for {
 		select {
@@ -181,13 +198,19 @@ func listenExecuteCommand(ctx context.Context, conn *net.Conn, ch chan<- *types.
 			return
 		default:
 			data, op, err := wsutil.ReadServerData(*conn)
+
+			if op == ws.OpClose || err == io.EOF {
+				blog.Errorf("execute handler: conn between (%s) is closed", (*conn).RemoteAddr().(*net.TCPAddr).IP)
+				break
+			}
 			if op == ws.OpContinuation {
 				blog.Errorf("drm: executeHandler quit with :%v", op)
-				return
+				time.Sleep(2 * time.Second)
+				continue
 			}
 			if err != nil {
 				blog.Errorf("execute command : get server data failed with err: %v", err)
-				return
+				continue
 			}
 
 			var cmd types.NotifyAgentData
@@ -201,7 +224,7 @@ func listenExecuteCommand(ctx context.Context, conn *net.Conn, ch chan<- *types.
 	}
 }
 
-func sysSignalHandler(cancel context.CancelFunc) {
+func sysSignalHandler(cancel context.CancelFunc, h *WebsocketHandler) {
 	interrupt := make(chan os.Signal)
 	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
 
@@ -211,10 +234,10 @@ func sysSignalHandler(cancel context.CancelFunc) {
 
 		cancel()
 		// TODO : release local resource, kill remote execute
+		h.clean()
 
 		p, err := process.NewProcess(int32(os.Getpid()))
 		if err == nil {
-			blog.Debugf("booster: ready kill children when recieved sinal")
 			// kill children
 			pkg.KillChildren(p)
 		}
