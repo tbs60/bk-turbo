@@ -278,11 +278,6 @@ func (d *directResourceManager) getFreeResource(
 		blog.Errorf("drm: failed to getAllFreeResource with userID(%s) for [%v]", userID, err)
 		return nil, err
 	}
-	if len(allfreeres) < 1 {
-		blog.Infof("kkk no free resource")
-	} else {
-		blog.Infof("kkk  free resource:(%v)", allfreeres[0].Resource)
-	}
 
 	res, err := callbackSelector(allfreeres, condition)
 	if err != nil {
@@ -551,9 +546,9 @@ func (d *directResourceManager) listCommands(userID string, resBatchID string) (
 		for _, r := range res {
 			ress = append(ress, &CommandResultInfo{
 				IP:     r.resource.Base.IP,
-				Status: CommandStatusSucceed,
+				Status: d.ifWorkerReady(r.resource.Base.IP),
 			})
-			blog.Infof("kkk agent(%s) worker ready: %v", r.resource.Base.IP, d.ifWorkerReady(r.resource.Base.IP, resBatchID))
+			blog.Infof("kkk agent(%s) worker ready: %v", r.resource.Base.IP, d.ifWorkerReady(r.resource.Base.IP))
 		}
 
 	}
@@ -563,11 +558,14 @@ func (d *directResourceManager) listCommands(userID string, resBatchID string) (
 	return ress, nil
 }
 
-func (d *directResourceManager) ifWorkerReady(agentIP string, resBatchID string) bool {
-	if v, ok := d.resource[resBatchID]; ok {
-		return v.WorkerReady
+func (d *directResourceManager) ifWorkerReady(agentIP string) CommandStatusType {
+	d.registerLock.RLock()
+	defer d.registerLock.RUnlock()
+
+	if v, ok := d.resource[agentIP]; ok && v.WorkerReady {
+		return CommandStatusSucceed
 	}
-	return false
+	return CommandStatusFail
 }
 
 func (d *directResourceManager) onResourceReport(resource *ReportAgentResource, conn *net.Conn) error {
@@ -1073,8 +1071,8 @@ func (d *directResourceManager) startHTTPServer() error {
 		go d.server.ListenAndServe()
 	*/
 	d.registerWebsocket()
-	blog.Infof("kkk ready to listen (%s)", ":"+d.conf.ListenIP+":"+strconv.Itoa(int(d.conf.ListenPort)))
-	go http.ListenAndServe(d.conf.ListenIP+":"+strconv.Itoa(int(d.conf.ListenPort)), nil)
+
+	go http.ListenAndServe(":"+strconv.Itoa(int(d.conf.ListenPort)), nil)
 	return nil
 }
 
@@ -1110,23 +1108,22 @@ func (d *directResourceManager) registerWebsocket() error {
 
 func executeHandle(conn net.Conn, mgr *directResourceManager) {
 	remoteIP := conn.RemoteAddr().(*net.TCPAddr).IP
-	blog.Infof("kkk execute handle from %s!", remoteIP.String())
+	blog.Infof("get execute handle from %s!", remoteIP.String())
+
 	cp, err := mgr.connPools.getConnPool(localCommon.ExecuteCommand)
 	if err != nil {
-		blog.Errorf("execute handler err: %v", err)
+		blog.Errorf("execute handler for %s failed with err: %v", remoteIP, err)
 	}
 	cp.Add(remoteIP.String(), &conn)
 
 	for {
-		data, op, err := wsutil.ReadClientData(conn)
+		_, op, err := wsutil.ReadClientData(conn)
 
 		if op == ws.OpClose || err == io.EOF {
 			blog.Errorf("execute handler: conn between (%s) is closed", remoteIP)
 			break
 		}
 		if op == ws.OpContinuation {
-			//blog.Errorf("drm: executeHandler quit with :%v", op)
-			time.Sleep(2 * time.Second)
 			continue
 		}
 		if err != nil {
@@ -1134,16 +1131,13 @@ func executeHandle(conn net.Conn, mgr *directResourceManager) {
 			continue
 		}
 
-		if len(data) > 0 {
-			blog.Infof("kkk executeHandler got (%v)", string(data))
-			break
-		}
 	}
 }
 
 func reportHandle(conn net.Conn, mgr *directResourceManager) {
 	remoteIP := conn.RemoteAddr().(*net.TCPAddr).IP
-	blog.Infof("kkk report handle from %s!", remoteIP.String())
+	blog.Infof("get report handle for %s!", remoteIP.String())
+
 	cp, err := mgr.connPools.getConnPool(localCommon.ReportResource)
 	if err != nil {
 		blog.Errorf("execute handler err: %v", err)
@@ -1158,8 +1152,6 @@ func reportHandle(conn net.Conn, mgr *directResourceManager) {
 			break
 		}
 		if op == ws.OpContinuation {
-			blog.Errorf("drm: reportHandler quit with :%v", op)
-			time.Sleep(2 * time.Second)
 			continue
 		}
 		if err != nil {
@@ -1174,7 +1166,6 @@ func reportHandle(conn net.Conn, mgr *directResourceManager) {
 			continue
 		}
 
-		// TODO : 获取agent 内网ip
 		resource.AgentInfo.Base.IP = remoteIP.String()
 
 		err = mgr.onResourceReport(&resource, &conn)
@@ -1182,7 +1173,7 @@ func reportHandle(conn net.Conn, mgr *directResourceManager) {
 			blog.Errorf("drm: reportHandler report failed:%v", err)
 		}
 	}
-	blog.Errorf("kkk report handle finish!")
+	blog.Errorf("report handle for %s finish!", remoteIP.String())
 }
 
 type handleWithUser struct {

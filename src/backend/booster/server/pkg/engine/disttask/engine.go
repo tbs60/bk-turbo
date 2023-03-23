@@ -523,10 +523,9 @@ func (de *disttaskEngine) launchTask(tb *engine.TaskBasic, queueName string) err
 	}
 
 	if matchDirectResource(queueName) {
-		blog.Infof("kkk %s   %s is direct queue", tb.ID, queueName)
 		return de.launchDirectTask(task, tb, queueName)
 	}
-	blog.Infof("kkk %s   %s is crm queue", tb.ID, queueName)
+
 	return de.launchCRMTask(task, tb, queueName)
 }
 
@@ -536,11 +535,10 @@ func (de *disttaskEngine) launchDirectTask(task *distTask, tb *engine.TaskBasic,
 		leastCPU:  task.InheritSetting.LeastCPU,
 		maxCPU:    task.InheritSetting.RequestCPU,
 	}
-	blog.Infof("kkk ready to get free resource cond(%v)", condition)
+
 	_, err := de.directMgr.GetFreeResource(tb.ID, condition, resourceSelector, nil)
 	// add task into public queue
 	if err == engine.ErrorNoEnoughResources {
-		blog.Errorf("kkk get resource for task(%s) failed :%v  ,condi:()", tb.ID, err, condition)
 		if publicQueue := de.getPublicQueueByQueueName(queueName); publicQueue != nil &&
 			de.canGiveToPublicQueue(queueName) {
 			publicQueue.Add(tb)
@@ -718,8 +716,6 @@ func (de *disttaskEngine) launchDirectDone(task *distTask) (bool, error) {
 		return false, err
 	}
 
-	blog.Infof("kkk : get infolist : [%v]", infoList)
-
 	workerList := make([]taskWorker, 0, 100)
 	for _, info := range infoList {
 		switch info.Status {
@@ -742,8 +738,6 @@ func (de *disttaskEngine) launchDirectDone(task *distTask) (bool, error) {
 		blog.Error("engine(%s) try list resources of task(%s) failed: %v", EngineName, task.ID, err)
 		return false, err
 	}
-
-	blog.Infof("kkk : get resource list : [%v]", resourceList)
 
 	var cpuTotal, memTotal float64 = 0, 0
 	for _, r := range resourceList {
@@ -1236,6 +1230,8 @@ func (de *disttaskEngine) getPublicQueueByQueueName(queueName string) engine.Sta
 		key = publicQueueK8SWindows
 	case queueNameHeaderDirectMac:
 		key = publicQueueDirectMac
+	case queueNameHeaderDirectWin:
+		key = publicQueueK8SWindows
 	default:
 		return nil
 	}
@@ -1280,16 +1276,12 @@ func getPlatform(queueName string) string {
 }
 
 func matchDirectResource(queueName string) bool {
-	if strings.HasPrefix(queueName, directQueuePrefix) {
-		return true
-	}
-	return false
-	/*switch getQueueNameHeader(queueName) {
+	switch getQueueNameHeader(queueName) {
 	case queueNameHeaderDirectWin, queueNameHeaderDirectMac:
 		return true
 	default:
 		return false
-	}*/
+	}
 }
 
 func getDirectLaunchCommand(queueName string) string {
@@ -1366,7 +1358,6 @@ func resourceSelector(
 	freeAgent []*respack.AgentResourceExternal,
 	condition interface{}) ([]*respack.AgentResourceExternal, error) {
 	if freeAgent == nil || len(freeAgent) == 0 {
-		blog.Infof("kkk  no enough resource!!! (%v)", freeAgent == nil)
 		return nil, engine.ErrorNoEnoughResources
 	}
 

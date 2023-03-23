@@ -126,9 +126,15 @@ func (h *WebsocketHandler) Start() error {
 		}
 	}
 
+	ticker := time.NewTicker(10 * time.Second)
 	for {
-		fmt.Println(" kkk")
-		time.Sleep(10 * time.Second)
+		select {
+		case <-ctx.Done():
+			break
+		case <-ticker.C:
+			// do something
+		}
+
 	}
 
 	return nil
@@ -187,8 +193,6 @@ func (h *WebsocketHandler) clean() {
 	if err != nil {
 		blog.Errorf("clean failed before agent quit: %v", err)
 	}
-
-	// kkk 是否通知客户端
 }
 
 func listenExecuteCommand(ctx context.Context, conn *net.Conn, ch chan<- *types.NotifyAgentData) {
