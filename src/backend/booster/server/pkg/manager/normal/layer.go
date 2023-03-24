@@ -58,6 +58,9 @@ type TaskBasicLayer interface {
 
 	// get the specific engine's task queue group
 	GetTaskQueueGroup(engineName engine.TypeName) (*engine.TaskQueueGroup, error)
+
+	// put staging task into next staging list
+	PushTaskNextQueue(tb *engine.TaskBasic) error
 }
 
 // NewDefaultTaskBasicLayer get a new default basic layer with engine maps.
@@ -264,6 +267,11 @@ func (tc *taskBasicLayer) UpdateHeartbeat(taskID string) error {
 	return tc.updateTaskBasic(tb, false)
 }
 
+func (tc *taskBasicLayer) PushTaskNextQueue(tb *engine.TaskBasic) error {
+
+	return nil
+}
+
 // GetConcurrency return the current no-terminated number of task basic in layer cache under given projectID.
 func (tc *taskBasicLayer) GetConcurrency(projectID string) int {
 	tc.tbmLock.RLock()
@@ -362,7 +370,10 @@ func (tc *taskBasicLayer) putTB(tb *engine.TaskBasic) {
 			tb.ID, tb.Client.EngineName, err)
 		return
 	}
+
 	queue := qg.GetQueue(tb.Client.QueueName)
+	exist := queue.Exist(tb.ID)
+	blog.Infof("kkk get tb  task(%s) queue(%s),status(%v),exist(%v)", tb.ID, tb.Client.QueueName, tb.Status.Status, exist)
 
 	// task in staging should be added into queue
 	if tb.Status.Status == engine.TaskStatusStaging {
@@ -372,7 +383,8 @@ func (tc *taskBasicLayer) putTB(tb *engine.TaskBasic) {
 		// then should call delete & add to Queue for adjusting the task rank.
 		if tc.tbm[tb.ID] == nil ||
 			tc.tbm[tb.ID].Status.Status != engine.TaskStatusStaging ||
-			tb.Client.Priority != tc.tbm[tb.ID].Client.Priority {
+			tb.Client.Priority != tc.tbm[tb.ID].Client.Priority ||
+			!exist {
 
 			tc.deleteTBFromQueue(tb)
 			queue.Add(tb)

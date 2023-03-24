@@ -845,7 +845,6 @@ func (o *processManager) detectWorker() bool {
 }
 
 func (o *processManager) detectWinWorker() bool {
-	// kkk just support direct worker
 	output, err := execCmd("tasklist")
 	if err != nil {
 		blog.Errorf("detect worker failed: %v", err)

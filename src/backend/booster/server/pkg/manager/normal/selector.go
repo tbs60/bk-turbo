@@ -164,6 +164,12 @@ func (s *selector) pick(egn engine.Engine, tqg *engine.TaskQueueGroup, queueName
 			blog.Errorf("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), queueName, err)
 		}
 		blog.Errorf("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), queueName, err)
+
+		nextQueue := tb.Client.GetQueueListNext()
+		if nextQueue != "" {
+			tb.Client.QueueName = nextQueue
+			s.layer.UpdateTaskBasic(tb)
+		}
 		return
 	}
 

@@ -199,7 +199,6 @@ func (de *disttaskEngine) SelectFirstTaskBasic(
 	queueName string) (*engine.TaskBasic, error) {
 	tb, err := tqg.GetQueue(queueName).First()
 	if err == engine.ErrorNoTaskInQueue {
-
 		publicQueue := de.getPublicQueueByQueueName(queueName)
 		if publicQueue == nil || !de.canTakeFromPublicQueue(queueName) {
 			// some queue should not share resources with others.
@@ -539,9 +538,17 @@ func (de *disttaskEngine) launchDirectTask(task *distTask, tb *engine.TaskBasic,
 	_, err := de.directMgr.GetFreeResource(tb.ID, condition, resourceSelector, nil)
 	// add task into public queue
 	if err == engine.ErrorNoEnoughResources {
+		// put int defined queue list first
+		nextQueue := tb.Client.GetQueueListNext()
+		if nextQueue != "" {
+			blog.Infof("queue (%s) has no enough resource, put task(%s) in queue (%s)", queueName, tb.ID, nextQueue)
+			return err
+		}
+
 		if publicQueue := de.getPublicQueueByQueueName(queueName); publicQueue != nil &&
 			de.canGiveToPublicQueue(queueName) {
 			publicQueue.Add(tb)
+			blog.Infof("queue (%s) has no enough resource, put task(%s) in public queue", queueName, tb.ID)
 		}
 		return err
 	}
@@ -665,9 +672,16 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 	})
 	// add task into public queue
 	if err == engine.ErrorNoEnoughResources {
+		nextQueue := tb.Client.GetQueueListNext()
+		if nextQueue != "" {
+			blog.Infof("queue (%s) has no enough resource, put task(%s) in queue (%s)", queueName, tb.ID, nextQueue)
+			return err
+		}
+
 		if publicQueue := de.getPublicQueueByQueueName(queueName); publicQueue != nil &&
 			de.canGiveToPublicQueue(queueName) {
 			publicQueue.Add(tb)
+			blog.Infof("queue (%s) has no enough resource, put task(%s) in public queue", queueName, tb.ID)
 		}
 		return err
 	}

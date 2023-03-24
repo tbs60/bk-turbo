@@ -10,6 +10,7 @@
 package engine
 
 import (
+	"strings"
 	"time"
 
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
@@ -43,6 +44,8 @@ const (
 	TaskStatusRunning  TaskStatusType = "running"
 	TaskStatusFailed   TaskStatusType = "failed"
 	TaskStatusFinish   TaskStatusType = "finish"
+
+	TaskqueueListSymbol = "\\"
 )
 
 // Terminated check if the task status is in terminated
@@ -178,6 +181,7 @@ func CopyTaskBasic(task *TaskBasic) *TaskBasic {
 type TaskBasicClient struct {
 	EngineName    TypeName
 	QueueName     string
+	QueueList     string
 	ProjectID     string
 	BuildID       string
 	Priority      TaskPriority
@@ -342,4 +346,33 @@ func (tbs *TaskBasicStatus) FailWithClientLost() {
 
 func now() time.Time {
 	return time.Now().Local()
+}
+
+func (tbc *TaskBasicClient) GetQueueListFirst() string {
+	index := strings.Index(tbc.QueueList, TaskqueueListSymbol)
+	if index == -1 {
+		return tbc.QueueList
+	}
+	return tbc.QueueList[:index]
+}
+
+func (tbc *TaskBasicClient) GetQueueListNext() string {
+	currentQueue := tbc.QueueName
+	index := strings.Index(tbc.QueueList, currentQueue)
+	if index == -1 {
+		return ""
+	}
+
+	left := strings.TrimPrefix(tbc.QueueList[index+len(currentQueue):], TaskqueueListSymbol)
+
+	index1 := strings.Index(left, TaskqueueListSymbol)
+	if index1 == -1 {
+		return left
+	}
+
+	next := left[:index1]
+	if next == currentQueue {
+		return ""
+	}
+	return next
 }

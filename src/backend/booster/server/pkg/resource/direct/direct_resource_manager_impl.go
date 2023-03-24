@@ -548,7 +548,6 @@ func (d *directResourceManager) listCommands(userID string, resBatchID string) (
 				IP:     r.resource.Base.IP,
 				Status: d.ifWorkerReady(r.resource.Base.IP),
 			})
-			blog.Infof("kkk agent(%s) worker ready: %v", r.resource.Base.IP, d.ifWorkerReady(r.resource.Base.IP))
 		}
 
 	}
@@ -871,7 +870,6 @@ func (d *directResourceManager) getAndUpdate(resource *ReportAgentResource) (*on
 		WorkerReady: false,
 	}
 
-	// kkk
 	oneagentres.Agent.Free = oneagentres.Agent.Total
 	oneagentres.WorkerReady = resource.WorkerReady
 

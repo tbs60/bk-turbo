@@ -205,7 +205,7 @@ func listenExecuteCommand(ctx context.Context, conn *net.Conn, ch chan<- *types.
 
 			if op == ws.OpClose || err == io.EOF {
 				blog.Errorf("execute handler: conn between (%s) is closed", (*conn).RemoteAddr().(*net.TCPAddr).IP)
-				break
+				return
 			}
 			if op == ws.OpContinuation {
 				blog.Errorf("drm: executeHandler quit with :%v", op)
