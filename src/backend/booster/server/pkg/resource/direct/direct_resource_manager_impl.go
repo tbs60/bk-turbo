@@ -279,7 +279,7 @@ func (d *directResourceManager) getFreeResource(
 		return nil, err
 	}
 
-	res, err := callbackSelector(allfreeres, condition)
+	res, err := callbackSelector(allfreeres, condition, d.conf.Agent4OneTask)
 	if err != nil {
 		blog.Errorf("drm: failed to callbackSelector with userID(%s) for [%v]", userID, err)
 		return nil, err
@@ -299,6 +299,7 @@ func (d *directResourceManager) getFreeResource(
 
 		// 更新相应的free列表，减去已分配的资源
 		d.decAllocatedResource(userID, res)
+		blog.Infof("kkk get free res:[%v]", res[0])
 	}
 
 	blog.Infof("drm: getFreeResource with userID[%s] resBatchID[%s] condition[%+v] res[%+v]",
@@ -366,6 +367,10 @@ func (d *directResourceManager) listResource(userID string, resBatchID string) (
 		}
 	}
 
+	if len(ress) > 0 {
+		blog.Infof("kkk list resource[%v]", ress[0].Resource)
+	}
+
 	blog.Infof("drm: listResource with userID[%s] resBatchID[%s],ress[%s]",
 		userID, resBatchID, strings.Join(resips, " "))
 	return ress, nil
@@ -398,6 +403,13 @@ func (d *directResourceManager) setResourceAllocated(
 			v.allocated[resBatchID] = append(resarray, allocatedRess...)
 		}
 		v.allocatedLock.Unlock()
+	}
+
+	for task, res := range v.allocated {
+		if len(res) > 0 {
+			blog.Infof("kkk get task(%s) allocated[%s] ", task, res[0])
+		}
+
 	}
 
 	return nil
@@ -545,8 +557,9 @@ func (d *directResourceManager) listCommands(userID string, resBatchID string) (
 
 		for _, r := range res {
 			ress = append(ress, &CommandResultInfo{
-				IP:     r.resource.Base.IP,
-				Status: d.ifWorkerReady(r.resource.Base.IP),
+				IP: r.resource.Base.IP,
+				//Status: d.ifWorkerReady(r.resource.Base.IP),
+				Status: CommandStatusSucceed,
 			})
 		}
 
@@ -585,6 +598,9 @@ func (d *directResourceManager) onResourceReport(resource *ReportAgentResource, 
 		d.resourceLock.Unlock()
 		return ErrResourceReported
 	}
+
+	blog.Infof("drm: get free resource from (%s) ,total [%v], free [%v]",
+		adjustedagentres.Agent.Base.IP, adjustedagentres.Agent.Total, adjustedagentres.Agent.Free)
 
 	// record the metric data
 	go recordResource(adjustedagentres)
@@ -849,8 +865,10 @@ func (d *directResourceManager) decAllocatedResource(userID string, allocated []
 			if allocatedip == freeip {
 				if d.conf.Agent4OneTask {
 					v.Agent.Free.Dec2(v.Agent.Free.CPU, v.Agent.Free.Mem, v.Agent.Free.Disk)
+					blog.Infof("kkk2 after dec [%v]", v.Agent.Free)
 				} else {
 					v.Agent.Free.Dec(&allocatedres.Resource)
+					blog.Infof("kkk after dec [%v]", v.Agent.Free)
 				}
 			}
 		}
@@ -872,6 +890,10 @@ func (d *directResourceManager) getAndUpdate(resource *ReportAgentResource) (*on
 
 	oneagentres.Agent.Free = oneagentres.Agent.Total
 	oneagentres.WorkerReady = resource.WorkerReady
+
+	for _, v := range resource.Allocated {
+		blog.Infof("kkk get resource [%v]", v.AllocatedResource)
+	}
 
 	// 减去agent侧已经占用的资源
 	var oktaskid = make(map[string]string, 100)

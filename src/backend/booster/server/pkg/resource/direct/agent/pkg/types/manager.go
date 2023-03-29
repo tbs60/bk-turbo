@@ -74,6 +74,8 @@ type NotifyAgentData struct {
 	// 保存关联的命令字和id，比如执行释放命令时，需要带上启动命令和进程id，便于agent侧执行相应的释放
 	ReferCmd string `json:"refer_cmd"`
 	ReferID  string `json:"refer_id"`
+
+	ResourceUsed Resource `json:"resource"`
 }
 
 func max(a float64, b float64) float64 {
@@ -164,6 +166,8 @@ type CommandInfo struct {
 	Status CommandStatusType `json:"status"`
 	// 用户自定义ID，具体含义由资源使用者自己解释
 	UserDefineID string `json:"user_define_id"`
+
+	ResourceUsed Resource `json:"resource"`
 }
 
 // CommandStatusType : type for worker status

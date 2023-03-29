@@ -545,7 +545,8 @@ func (fe *fastbuildEngine) updateTask(task *fastbuildTask) error {
 
 func (fe *fastbuildEngine) resourceSelector(
 	free []*respack.AgentResourceExternal,
-	condition interface{}) ([]*respack.AgentResourceExternal, error) {
+	condition interface{},
+	if4onetask bool) ([]*respack.AgentResourceExternal, error) {
 	if free == nil || len(free) == 0 {
 		err := fmt.Errorf("engine(%s) free resource is empty, do nothing within SelectResource", EngineName)
 		blog.Errorf("%v", err)

@@ -733,7 +733,8 @@ func (ae *apisEngine) updateTask(task *apisTask) error {
 
 func (ae *apisEngine) resourceSelector(
 	freeAgent []*direct.AgentResourceExternal,
-	condition interface{}) ([]*direct.AgentResourceExternal, error) {
+	condition interface{},
+	if4onetask bool) ([]*direct.AgentResourceExternal, error) {
 	if freeAgent == nil || len(freeAgent) == 0 {
 		return nil, engine.ErrorNoEnoughResources
 	}

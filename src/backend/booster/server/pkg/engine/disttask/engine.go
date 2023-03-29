@@ -12,6 +12,7 @@ package disttask
 import (
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -595,6 +596,11 @@ func (de *disttaskEngine) launchDirectTask(task *distTask, tb *engine.TaskBasic,
 			UserDefineID: task.ID,
 			Dir:          getDirectPath(task.InheritSetting.QueueName),
 			Path:         getDirectPath(task.InheritSetting.QueueName),
+			ResourceUsed: respack.Resource{
+				CPU:  r.Resource.CPU,
+				Mem:  r.Resource.Mem,
+				Disk: r.Resource.Disk,
+			},
 		}); err != nil {
 			blog.Errorf("engine(%s) try launching direct task(%s), execute command on(%s) failed: %v",
 				EngineName, tb.ID, r.Base.IP, err)
@@ -1370,7 +1376,8 @@ func GetK8sInstanceKey(queueName string) *config.InstanceType {
 
 func resourceSelector(
 	freeAgent []*respack.AgentResourceExternal,
-	condition interface{}) ([]*respack.AgentResourceExternal, error) {
+	condition interface{},
+	if4onetask bool) ([]*respack.AgentResourceExternal, error) {
 	if freeAgent == nil || len(freeAgent) == 0 {
 		return nil, engine.ErrorNoEnoughResources
 	}
@@ -1403,8 +1410,21 @@ func resourceSelector(
 			continue
 		}
 
-		cpuTotal += agent.Resource.CPU
-		r = append(r, agent)
+		if if4onetask {
+			cpuTotal += agent.Resource.CPU
+			r = append(r, agent)
+		} else {
+			used := math.Min(c.maxCPU-cpuTotal, agent.Resource.CPU)
+			cpuTotal += used
+			r = append(r, &respack.AgentResourceExternal{
+				Base: agent.Base,
+				Resource: respack.Resource{
+					CPU: used,
+					Mem: used * 1024,
+				},
+			})
+		}
+
 		blog.Infof("engine(%s) select free agent(%s:%.2f) with cluster(%s), current(%.2f), target(%.2f~%.2f)",
 			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.leastCPU, c.maxCPU)
 	}

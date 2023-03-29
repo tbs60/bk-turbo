@@ -17,7 +17,7 @@ import (
 type CallBack4Command func(usedRes []*CommandResultInfo) error
 
 // CallBackSelector ： 回调函数，用于用户选择需要的资源
-type CallBackSelector func(free []*AgentResourceExternal, condition interface{}) ([]*AgentResourceExternal, error)
+type CallBackSelector func(free []*AgentResourceExternal, condition interface{}, if4onetask bool) ([]*AgentResourceExternal, error)
 
 // ResourceManager : to manage agent resource
 type ResourceManager interface {
@@ -72,6 +72,8 @@ type Command struct {
 	// 保存关联的命令字和id，比如执行释放命令时，需要带上启动命令和进程id，便于agent侧执行相应的释放
 	ReferCmd string `json:"refer_cmd"`
 	ReferID  string `json:"refer_id"`
+
+	ResourceUsed Resource `json:"resource"`
 }
 
 // Resource : 资源信息

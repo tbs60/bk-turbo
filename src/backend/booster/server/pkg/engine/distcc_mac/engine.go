@@ -725,7 +725,8 @@ func (de *distccMacEngine) getServerIPList() []string {
 
 func (de *distccMacEngine) resourceSelector(
 	freeAgent []*respack.AgentResourceExternal,
-	condition interface{}) ([]*respack.AgentResourceExternal, error) {
+	condition interface{},
+	if4onetask bool) ([]*respack.AgentResourceExternal, error) {
 	if freeAgent == nil || len(freeAgent) == 0 {
 		return nil, engine.ErrorNoEnoughResources
 	}
