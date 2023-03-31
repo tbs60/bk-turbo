@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/metric/controllers"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
 	localCommon "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
@@ -98,6 +99,7 @@ type oneagentResource struct {
 	// last report time, time.Now().Unix()
 	Update      int64
 	WorkerReady bool
+	TaskList    []string
 }
 
 type allocatedResource struct {
@@ -280,9 +282,20 @@ func (d *directResourceManager) getFreeResource(
 	}
 
 	res, err := callbackSelector(allfreeres, condition, d.conf.Agent4OneTask)
+
 	if err != nil {
-		blog.Errorf("drm: failed to callbackSelector with userID(%s) for [%v]", userID, err)
-		return nil, err
+		if err == engine.ErrorNoEnoughResources && !d.conf.Agent4OneTask {
+			// add resource from allocated agent
+			addRes, err1 := d.addRes(resBatchID, condition)
+			if err1 != nil {
+				blog.Errorf("drm: failed to add resource to userID(%s) for [%v]", userID, err1)
+				return nil, err
+			}
+			res = append(res, addRes...)
+		} else {
+			blog.Errorf("drm: failed to callbackSelector with userID(%s) for [%v]", userID, err)
+			return nil, err
+		}
 	}
 
 	if res == nil {
@@ -307,6 +320,19 @@ func (d *directResourceManager) getFreeResource(
 	return res, nil
 }
 
+func (d *directResourceManager) addRes(resBatchID string, condition interface{}) ([]*AgentResourceExternal, error) {
+	// TODO : choose from allocated resource
+	res := []*AgentResourceExternal{}
+	blog.Infof("drm : kkk : condition[%s]", fmt.Sprintf("%v", condition))
+	for ip, r := range d.resource {
+		if strings.Contains(fmt.Sprintf("%v", condition), r.Agent.Base.Cluster) {
+			blog.Infof("drm : kkk : add (%s) to task(%s)", ip, resBatchID)
+			res = append(res, r.Agent.FreeToExternal())
+		}
+	}
+	return res, nil
+}
+
 // releaseResource : 通知agent释放worker；清除占用记录；清除回调记录
 func (d *directResourceManager) releaseResource(userID string, resBatchID string) error {
 	blog.Infof("drm: releaseResource with userID[%s] resBatchID[%s]", userID, resBatchID)
@@ -322,18 +348,26 @@ func (d *directResourceManager) releaseResource(userID string, resBatchID string
 		d.mysql.PutAllocatedResource(rec)
 	}
 
-	// 通知agent释放worker
-	d.notifyAllAgentRelease(userID, resBatchID)
-
 	v := d.getUserAllocated(userID)
 	if v != nil {
 		v.allocatedLock.Lock()
 		// 清除占用记录
-		if _, ok := v.allocated[resBatchID]; ok {
+		if res, ok := v.allocated[resBatchID]; ok {
+			for _, r := range res {
+				err := d.removeTaskFromList(r.resource.Base.IP, resBatchID)
+				if err != nil {
+					blog.Errorf("drm : remove task (%s) from [%s] tasklist failed with err: %v",
+						resBatchID, r.resource.Base.IP, err)
+				}
+				blog.Infof("drm : remove task (%s) from [%s] tasklist", resBatchID, r.resource.Base.IP)
+			}
 			delete(v.allocated, resBatchID)
 		}
 		v.allocatedLock.Unlock()
 	}
+
+	// 通知agent释放worker
+	d.notifyAllAgentRelease(userID, resBatchID)
 
 	v2 := d.getUserBatchresCallback(userID)
 	if v2 != nil {
@@ -345,6 +379,24 @@ func (d *directResourceManager) releaseResource(userID string, resBatchID string
 		v2.batchresCallbacksLock.Unlock()
 	}
 
+	return nil
+}
+
+func (d *directResourceManager) removeTaskFromList(agentIP string, resBatchID string) error {
+	d.resourceLock.Lock()
+	defer d.resourceLock.Unlock()
+
+	res, ok := d.resource[agentIP]
+	if !ok {
+		return errors.New(fmt.Sprintf("drm: [%s] not found in resource map", agentIP))
+	}
+	for i, s := range res.TaskList {
+		if s == resBatchID {
+			newList := append(res.TaskList[:i], res.TaskList[i+1:]...)
+			d.resource[agentIP].TaskList = newList
+			break
+		}
+	}
 	return nil
 }
 
@@ -409,7 +461,6 @@ func (d *directResourceManager) setResourceAllocated(
 		if len(res) > 0 {
 			blog.Infof("kkk get task(%s) allocated[%s] ", task, res[0])
 		}
-
 	}
 
 	return nil
@@ -447,6 +498,11 @@ func (d *directResourceManager) setResourceCallbacks(
 
 func (d *directResourceManager) executeCommand(userID string, ip string, resBatchID string, cmd *Command) error {
 	blog.Infof("drm: executeCommand with userID[%s] ip[%s] resbatchid[%s] cmd[%+v]", userID, ip, resBatchID, cmd)
+
+	if cmd.CmdType == CmdLaunch && d.ifWorkerReady(ip) == CommandStatusSucceed {
+		blog.Infof("drm: task(%s) worker on agent (%s) is already launched, launch cmd not send", resBatchID, ip)
+		return nil
+	}
 
 	port, err := d.getAgentPort(ip, resBatchID)
 	if err != nil {
@@ -698,8 +754,8 @@ func (d *directResourceManager) notifyAllAgentRelease(userID, resBatchID string)
 
 	d.resourceLock.RLock()
 	for ip, agent := range d.resource {
-		blog.Infof("drm: check for ip [%s]", ip)
-		if len(agent.Agent.Allocated) > 0 {
+		blog.Infof("drm: check for ip [%s],tasklist [%v]", ip, agent.TaskList)
+		if len(agent.Agent.Allocated) > 0 && len(agent.TaskList) <= 0 {
 			for _, v := range agent.Agent.Allocated {
 				if v.UserID == userID && v.ResBatchID == resBatchID {
 					for _, c := range v.Commands {
@@ -864,11 +920,13 @@ func (d *directResourceManager) decAllocatedResource(userID string, allocated []
 			freeip := v.Agent.Base.IP
 			if allocatedip == freeip {
 				if d.conf.Agent4OneTask {
+					if v.Agent.Free.CPU <= 0 {
+						continue
+					}
 					v.Agent.Free.Dec2(v.Agent.Free.CPU, v.Agent.Free.Mem, v.Agent.Free.Disk)
-					blog.Infof("kkk2 after dec [%v]", v.Agent.Free)
 				} else {
 					v.Agent.Free.Dec(&allocatedres.Resource)
-					blog.Infof("kkk after dec [%v]", v.Agent.Free)
+
 				}
 			}
 		}
@@ -890,6 +948,7 @@ func (d *directResourceManager) getAndUpdate(resource *ReportAgentResource) (*on
 
 	oneagentres.Agent.Free = oneagentres.Agent.Total
 	oneagentres.WorkerReady = resource.WorkerReady
+	oneagentres.TaskList = []string{}
 
 	for _, v := range resource.Allocated {
 		blog.Infof("kkk get resource [%v]", v.AllocatedResource)
@@ -911,6 +970,8 @@ func (d *directResourceManager) getAndUpdate(resource *ReportAgentResource) (*on
 		for resBatchID, v1 := range v.allocated {
 			for _, agent := range v1 {
 				if agent.resource.Base.IP == agentip {
+					oneagentres.TaskList = append(oneagentres.TaskList, resBatchID)
+					blog.Infof("drm: find agent[%s] is serving task[%s]", agentip, resBatchID)
 					blog.Debugf("drm: deal for res[%v]", agentip)
 					if _, ok := oktaskid[resBatchID]; !ok {
 						blog.Infof("drm: not in reported list for resBatchID[%s],need dec", resBatchID)

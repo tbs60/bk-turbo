@@ -12,7 +12,6 @@ package disttask
 import (
 	"errors"
 	"fmt"
-	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1410,9 +1409,10 @@ func resourceSelector(
 			continue
 		}
 
-		if if4onetask {
-			cpuTotal += agent.Resource.CPU
-			r = append(r, agent)
+		cpuTotal += agent.Resource.CPU
+		r = append(r, agent)
+		/*if if4onetask {
+
 		} else {
 			used := math.Min(c.maxCPU-cpuTotal, agent.Resource.CPU)
 			cpuTotal += used
@@ -1423,7 +1423,7 @@ func resourceSelector(
 					Mem: used * 1024,
 				},
 			})
-		}
+		}*/
 
 		blog.Infof("engine(%s) select free agent(%s:%.2f) with cluster(%s), current(%.2f), target(%.2f~%.2f)",
 			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.leastCPU, c.maxCPU)
