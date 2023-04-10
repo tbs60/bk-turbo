@@ -256,6 +256,7 @@ func getTaskInfo(taskID string) (*RespTaskInfo, error) {
 		HostList:    te.WorkerList(),
 		QueueNumber: rank,
 		Message:     tb.Status.Message,
+		Queue:       tb.Client.QueueName,
 		Extra:       string(te.Dump()),
 	}, nil
 }

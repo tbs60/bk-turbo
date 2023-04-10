@@ -330,6 +330,8 @@ func (o *tcpManager) dealTCPConn(conn *net.TCPConn) error {
 		return o.dealSendFileCmd(client, head)
 	case dcProtocol.PBCmdType_CHECKCACHEREQ:
 		return o.dealCheckCacheCmd(client, head)
+	case dcProtocol.PBCmdType_ENSUREWORKERREQ:
+		return o.dealEnsureWorker(client, head)
 	default:
 		err := fmt.Errorf("unknow cmd %s", head.GetCmdtype())
 		blog.Warnf("%v", err)
@@ -337,6 +339,18 @@ func (o *tcpManager) dealTCPConn(conn *net.TCPConn) error {
 		// return err
 		return o.dealUnknownCmd(client, head)
 	}
+}
+
+func (o *tcpManager) dealEnsureWorker(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
+	handler := pbcmd.GetHandler(head.GetCmdtype())
+	if handler == nil {
+		err := fmt.Errorf("failed to get handler for cmd %s", head.GetCmdtype())
+		blog.Errorf("%v", err)
+		_ = client.Close()
+		return err
+	}
+
+	return handler.Handle(client, head, nil, time.Now(), "", nil)
 }
 
 func (o *tcpManager) dealRemoteTaskCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {

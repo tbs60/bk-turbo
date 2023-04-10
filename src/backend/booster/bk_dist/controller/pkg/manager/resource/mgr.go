@@ -950,3 +950,15 @@ func (m *Mgr) request(method, server, uri string, data []byte) ([]byte, bool, er
 
 	return by, true, nil
 }
+
+func (m *Mgr) IfResourceDirect() bool {
+	m.reslock.RLock()
+	defer m.reslock.RUnlock()
+
+	if len(m.resources) == 0 {
+		blog.Infof("resource: no resource")
+		return true
+	}
+	q := m.resources[0].taskInfo.Queue
+	return strings.HasPrefix(q, "direct")
+}

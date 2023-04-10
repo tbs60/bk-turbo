@@ -456,6 +456,14 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 	blog.Infof("remote: selected host(%s) with large file(%s)",
 		req.Server.Server, fpath)
 
+	if m.work.Resource().IfResourceDirect() {
+		handler := m.remoteWorker.Handler(0, nil, nil, nil)
+		if ok, _ := handler.EnsureWorkerOK(req.Server.Server); !ok {
+			blog.Infof("remote: ensure server(%s) is not ok, maybe worker is busy", req.Server.Server)
+			return nil, types.ErrWorkerBusy
+		}
+	}
+
 	dcSDK.StatsTimeNow(&req.Stats.RemoteWorkLockTime)
 	defer dcSDK.StatsTimeNow(&req.Stats.RemoteWorkUnlockTime)
 	defer m.unlockSlots(dcSDK.JobUsageRemoteExe, req.Server)

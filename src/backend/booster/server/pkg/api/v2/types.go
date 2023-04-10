@@ -48,6 +48,7 @@ type RespTaskInfo struct {
 	HostList    []string              `json:"host_list"`
 	QueueNumber int                   `json:"queue_number"`
 	Message     string                `json:"message"`
+	Queue       string                `json:"queue"`
 
 	Extra string `json:"extra"`
 }

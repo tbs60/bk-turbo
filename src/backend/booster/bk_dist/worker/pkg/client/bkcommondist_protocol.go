@@ -173,6 +173,53 @@ func encodeSynctimeReq() ([]protocol.Message, error) {
 	return messages, nil
 }
 
+func encodeEnsureWorkerReq() ([]protocol.Message, error) {
+	blog.Debugf("encode sync time request to message now")
+
+	// encode head
+	var bodylen int32
+	var filebuflen int64
+	cmdtype := protocol.PBCmdType_ENSUREWORKERREQ
+	pbhead := protocol.PBHead{
+		Version: &bkdistcmdversion,
+		Magic:   &bkdistcmdmagic,
+		Bodylen: &bodylen,
+		Buflen:  &filebuflen,
+		Cmdtype: &cmdtype,
+	}
+	headdata, err := proto.Marshal(&pbhead)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbhead")
+		return nil, err
+	}
+	blog.Debugf("encode head[%s] to size %d", pbhead.String(), pbhead.XXX_Size())
+
+	headtokendata, err := bkformatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
+	if err != nil {
+		blog.Warnf("failed to format head token")
+		return nil, err
+	}
+	headtokenmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headtokendata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	headmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headdata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	// all messages
+	messages := []protocol.Message{
+		headtokenmessage,
+		headmessage,
+	}
+
+	return messages, nil
+}
+
 func receiveSynctimeRsp(client *TCPClient) (*protocol.PBBodySyncTimeRsp, error) {
 	blog.Debugf("receive bk-common-disptach response now")
 
@@ -204,6 +251,48 @@ func receiveSynctimeRsp(client *TCPClient) (*protocol.PBBodySyncTimeRsp, error) 
 	}
 
 	body := protocol.PBBodySyncTimeRsp{}
+	err = proto.Unmarshal(data[0:datalen], &body)
+
+	if err != nil {
+		blog.Warnf("failed to decode pbbody error: %v", err)
+	} else {
+		blog.Debugf("succeed to decode pbbody ")
+	}
+
+	return &body, nil
+}
+
+func receiveEnsureWorkerRsp(client *TCPClient) (*protocol.PBBodyEnsureWorkerRsp, error) {
+	blog.Debugf("receive bk-common-disptach response now")
+
+	// receive head
+	head, err := receiveCommonHead(client)
+	if err != nil {
+		return nil, err
+	}
+
+	if head.GetCmdtype() != protocol.PBCmdType_ENSUREWORKERRSP {
+		err := fmt.Errorf("unknown cmd type %v", head.GetCmdtype())
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+
+	bodylen := head.GetBodylen()
+	if bodylen <= 0 {
+		err := fmt.Errorf("get invalid body length %d", bodylen)
+		blog.Warnf("%v", err)
+		return nil, err
+	}
+	blog.Debugf("got bodylen %d", bodylen)
+
+	// receive body
+	data, datalen, err := client.ReadData(int(bodylen))
+	if err != nil {
+		blog.Warnf("failed to receive pbbody")
+		return nil, err
+	}
+
+	body := protocol.PBBodyEnsureWorkerRsp{}
 	err = proto.Unmarshal(data[0:datalen], &body)
 
 	if err != nil {

@@ -105,6 +105,38 @@ func (r *CommonRemoteHandler) ExecuteSyncTime(server string) (int64, error) {
 	return rsp.GetTimenanosecond(), nil
 }
 
+// EnsureWorkerOK ensure P2P worker is OK before execute task
+func (r *CommonRemoteHandler) EnsureWorkerOK(server string) (bool, error) {
+	client := NewTCPClient(r.ioTimeout)
+	if err := client.Connect(server); err != nil {
+		blog.Warnf("error: %v", err)
+		return true, err
+	}
+	defer func() {
+		_ = client.Close()
+	}()
+
+	messages, err := encodeEnsureWorkerReq()
+	if err != nil {
+		blog.Warnf("error: %v", err)
+		return true, err
+	}
+
+	err = sendMessages(client, messages)
+	if err != nil {
+		blog.Warnf("error: %v", err)
+		return true, err
+	}
+
+	rsp, err := receiveEnsureWorkerRsp(client)
+	if err != nil {
+		blog.Warnf("error: %v", err)
+		return true, err
+	}
+
+	return *rsp.Ifok, nil
+}
+
 // ExecuteTask do execution in remote and get back the result(and files)
 func (r *CommonRemoteHandler) ExecuteTask(
 	server *dcProtocol.Host,

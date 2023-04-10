@@ -1,5 +1,6 @@
 package protocol;
 
+option go_package = ".\\protocol";
 enum PBCompressType {
 	NONE = 0;
 	LZO = 1;
@@ -86,6 +87,8 @@ enum PBCmdType {
     SENDFILERSP = 5;
     CHECKCACHEREQ = 6;
     CHECKCACHERSP = 7;
+	ENSUREWORKERREQ = 8;
+    ENSUREWORKERRSP = 9;
 	UNKNOWN = 9999;
 }
 
@@ -109,6 +112,10 @@ message PBBodyDispatchTaskRsp {
 
 message PBBodySyncTimeRsp {
 	required int64 timenanosecond = 1;
+}
+
+message PBBodyEnsureWorkerRsp {
+	required bool ifok = 1;
 }
 
 message PBBodySendFileReq {

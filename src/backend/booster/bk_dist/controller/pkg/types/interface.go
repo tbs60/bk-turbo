@@ -172,6 +172,9 @@ type ResourceMgr interface {
 
 	// check whether apply finished
 	IsApplyFinished() bool
+
+	// judge if use direct resource
+	IfResourceDirect() bool
 }
 
 // BasicMgr describe a manager for handling all actions with work basic issues

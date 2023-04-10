@@ -40,6 +40,7 @@ func InitHandlers() {
 		dcProtocol.PBCmdType_SYNCTIMEREQ:     NewHandle4SyncTime(),
 		dcProtocol.PBCmdType_SENDFILEREQ:     NewHandle4SendFile(),
 		dcProtocol.PBCmdType_CHECKCACHEREQ:   NewHandle4FileCache(),
+		dcProtocol.PBCmdType_ENSUREWORKERREQ: NewHandle4EnsureWorker(),
 		dcProtocol.PBCmdType_UNKNOWN:         NewHandle4Unknown(),
 	}
 }

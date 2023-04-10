@@ -666,6 +666,74 @@ func EncodeBKSyncTimeRsp(receivedtime time.Time) ([]protocol.Message, error) {
 	return messages, nil
 }
 
+// EncodeEnsureWorkerReq encode worker status to message
+func EncodeEnsureWorkerReq() ([]protocol.Message, error) {
+	blog.Debugf("encode synctime request to message now")
+
+	// encode body and file to message
+	// kkk todo
+	ifok := true
+	pbbody := protocol.PBBodyEnsureWorkerRsp{
+		Ifok: &ifok,
+	}
+
+	bodydata, err := proto.Marshal(&pbbody)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbbody for error: %v", err)
+		return nil, err
+	}
+	bodymessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         bodydata,
+		Compresstype: protocol.CompressNone,
+	}
+	bodylen := int32(pbbody.XXX_Size())
+	blog.Infof("encode body to size %d", bodylen)
+
+	// encode head
+	var filebuflen int64
+	cmdtype := protocol.PBCmdType_SYNCTIMERSP
+	pbhead := protocol.PBHead{
+		Version: &bkdistcmdversion,
+		Magic:   &bkdistcmdmagic,
+		Bodylen: &bodylen,
+		Buflen:  &filebuflen,
+		Cmdtype: &cmdtype,
+	}
+	headdata, err := proto.Marshal(&pbhead)
+	if err != nil {
+		blog.Warnf("failed to proto.Marshal pbhead with err:%v", err)
+		return nil, err
+	}
+	blog.Infof("encode head to size %d", pbhead.XXX_Size())
+
+	headtokendata, err := formatTokenInt(protocol.TOEKNHEADFLAG, pbhead.XXX_Size())
+	if err != nil {
+		blog.Warnf("failed to format head token with err:%v", err)
+		return nil, err
+	}
+	headtokenmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headtokendata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	headmessage := protocol.Message{
+		Messagetype:  protocol.MessageString,
+		Data:         headdata,
+		Compresstype: protocol.CompressNone,
+	}
+
+	// all messages
+	messages := []protocol.Message{
+		headtokenmessage,
+		headmessage,
+		bodymessage,
+	}
+
+	return messages, nil
+}
+
 // EncodeBKCheckCacheRsp encode result to Messages
 func EncodeBKCheckCacheRsp(result []*protocol.PBCacheResult) ([]protocol.Message, error) {
 	blog.Debugf("encode synctime request to message now")
