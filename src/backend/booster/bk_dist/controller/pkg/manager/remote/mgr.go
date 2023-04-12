@@ -460,6 +460,7 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 		handler := m.remoteWorker.Handler(0, nil, nil, nil)
 		if ok, _ := handler.EnsureWorkerOK(req.Server.Server); !ok {
 			blog.Infof("remote: ensure server(%s) is not ok, maybe worker is busy", req.Server.Server)
+			go m.handleWorkerBusy(req.Server)
 			return nil, types.ErrWorkerBusy
 		}
 	}
@@ -1817,5 +1818,16 @@ func (m *Mgr) handleNetError(req *types.RemoteTaskExecuteRequest, err error) {
 				"make it dead", req.Server.Server, m.work.ID(), w.continuousNetErrors, err)
 		}
 		break
+	}
+}
+
+func (m *Mgr) handleWorkerBusy(host *dcProtocol.Host) {
+	for _, w := range m.resource.getWorkers() {
+		if !w.host.Equal(host) {
+			continue
+		}
+		m.resource.workerDead(w)
+		time.Sleep(5 * time.Second)
+		m.resource.recoverDeadWorker(w)
 	}
 }
