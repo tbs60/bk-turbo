@@ -85,11 +85,12 @@ type Resource struct {
 
 // AgentBase : agent info
 type AgentBase struct {
-	IP      string            `json:"ip"`
-	Port    int               `json:"port"`
-	Message string            `json:"message"`
-	Cluster string            `json:"cluster"`
-	Labels  map[string]string `json:"labels"`
+	IP        string            `json:"ip"`
+	Port      int               `json:"port"`
+	Message   string            `json:"message"`
+	Cluster   string            `json:"cluster"`
+	Labels    map[string]string `json:"labels"`
+	TaskLimit int               `json:"task_limit"`
 }
 
 // AgentInfo : agent info
@@ -154,13 +155,15 @@ var commandStatusTypeMap = map[CommandStatusType]string{
 type AgentResourceExternal struct {
 	Base     AgentBase `json:"base"`
 	Resource Resource  `json:"free"`
+	TaskList []string  `json:"task_list"`
 }
 
 // FreeToExternal format free resource to AgentResourceExternal
-func (a *AgentInfo) FreeToExternal() *AgentResourceExternal {
+func (a *AgentInfo) FreeToExternal(tl []string) *AgentResourceExternal {
 	return &AgentResourceExternal{
 		Base:     a.Base,
 		Resource: a.Free,
+		TaskList: tl,
 	}
 }
 

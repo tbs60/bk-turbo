@@ -29,7 +29,6 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/metric/controllers"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
-	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine"
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
 	localCommon "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
@@ -284,18 +283,8 @@ func (d *directResourceManager) getFreeResource(
 	res, err := callbackSelector(allfreeres, condition, d.conf.Agent4OneTask)
 
 	if err != nil {
-		if err == engine.ErrorNoEnoughResources && !d.conf.Agent4OneTask {
-			// add resource from allocated agent
-			addRes, err1 := d.addRes(resBatchID, condition)
-			if err1 != nil {
-				blog.Errorf("drm: failed to add resource to userID(%s) for [%v]", userID, err1)
-				return nil, err
-			}
-			res = append(res, addRes...)
-		} else {
-			blog.Errorf("drm: failed to callbackSelector with userID(%s) for [%v]", userID, err)
-			return nil, err
-		}
+		blog.Errorf("drm: failed to callbackSelector with userID(%s) for [%v]", userID, err)
+		return nil, err
 	}
 
 	if res == nil {
@@ -324,12 +313,17 @@ func (d *directResourceManager) addRes(resBatchID string, condition interface{})
 	// TODO : choose from allocated resource
 	res := []*AgentResourceExternal{}
 	blog.Infof("drm : kkk : condition[%s]", fmt.Sprintf("%v", condition))
+
+	d.resourceLock.RLock()
 	for ip, r := range d.resource {
 		if strings.Contains(fmt.Sprintf("%v", condition), r.Agent.Base.Cluster) {
-			blog.Infof("drm : kkk : add (%s) to task(%s)", ip, resBatchID)
-			res = append(res, r.Agent.FreeToExternal())
+			if len(r.TaskList) < r.Agent.Base.TaskLimit {
+				blog.Infof("drm: add agent(%s) to serve task(%s)", ip, resBatchID)
+				res = append(res, r.Agent.FreeToExternal(r.TaskList))
+			}
 		}
 	}
+	d.resourceLock.RUnlock()
 	return res, nil
 }
 
@@ -400,6 +394,20 @@ func (d *directResourceManager) removeTaskFromList(agentIP string, resBatchID st
 	return nil
 }
 
+func (d *directResourceManager) updateTaskList(resBathchID string, res *AgentResourceExternal) error {
+	d.resourceLock.Lock()
+	defer d.resourceLock.Unlock()
+
+	for _, r := range d.resource {
+		if r.Agent.Base.IP != res.Base.IP {
+			continue
+		}
+		r.TaskList = append(r.TaskList, resBathchID)
+		break
+	}
+	return nil
+}
+
 // listResource : 返回 资源id关联的资源列表
 func (d *directResourceManager) listResource(userID string, resBatchID string) ([]*AgentResourceExternal, error) {
 	blog.Infof("drm: listResource with userID[%s] resBatchID[%s]", userID, resBatchID)
@@ -441,6 +449,8 @@ func (d *directResourceManager) setResourceAllocated(
 			resource:      r,
 			allocatedTime: time.Now().Unix(),
 		})
+
+		d.updateTaskList(resBatchID, r)
 	}
 
 	v := d.getUserAllocated(userID)
@@ -897,14 +907,17 @@ func (d *directResourceManager) getAllocatedResourceRecord(userID string,
 // getAllFreeResource : 获取所有的空闲资源
 func (d *directResourceManager) getAllFreeResource(userID string) ([]*AgentResourceExternal, error) {
 	//blog.Infof("getAllFreeResource with userID[%s]", userID)
-
 	ress := []*AgentResourceExternal{}
+
+	d.resourceLock.RLock()
+	defer d.resourceLock.RUnlock()
+
 	for _, v := range d.resource {
 		// 需要确认下 free 里面的字段是否完整，如果不完整，需要补齐
-		externalagent := v.Agent.FreeToExternal()
-		if externalagent.Resource.CPU > 0 {
-			ress = append(ress, externalagent)
-		}
+		externalagent := v.Agent.FreeToExternal(v.TaskList)
+		//if externalagent.Resource.CPU > 0 {
+		ress = append(ress, externalagent)
+		//}
 	}
 
 	return ress, nil

@@ -52,6 +52,7 @@ type ServerConfig struct {
 	AgentRemouteCmd       []string `json:"agent_remote_cmds" value:"" usage:"agent remote cmds to launch application"`
 	UpdateCPURealtime     bool     `json:"update_cpu_realtime" value:"false" usage:"if set true, we will report cpu resource by cpu usage"`
 	AgentRemouteCmdPrefix string   `json:"agent_remote_cmd_prefix" value:"FBuildWorker" usage:"agent remote cmd prefix to judge whether process is running"`
+	AgentTaskLimit        int      `json:"agent_task_limit" value:"1" usage:"the max num of tasks that a the agent can parallelly handle"`
 
 	AgentReleaseCmds []string `json:"agent_release_cmd" value:"" usage:"locals cmds to release application"`
 

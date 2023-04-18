@@ -130,12 +130,13 @@ type Resource struct {
 
 // AgentBase : agent info
 type AgentBase struct {
-	IP      string            `json:"ip"`
-	Port    int               `json:"port"`
-	Message string            `json:"message"`
-	Cluster string            `json:"cluster"`
-	Labels  map[string]string `json:"labels"`
-	User    string            `json:"user"`
+	IP        string            `json:"ip"`
+	Port      int               `json:"port"`
+	Message   string            `json:"message"`
+	Cluster   string            `json:"cluster"`
+	Labels    map[string]string `json:"labels"`
+	User      string            `json:"user"`
+	TaskLimit int               `json:"task_limit"`
 }
 
 // AgentInfo : agent info

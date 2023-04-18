@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1390,9 +1391,17 @@ func resourceSelector(
 	blog.Infof("engine(%s) ready take free resource with condition [%+v] queue[%s], len(free)[%d]",
 		EngineName, condition, c.queueName, len(freeAgent))
 
+	// to select free worker first
+	sort.Slice(freeAgent, func(i, j int) bool {
+		if len(freeAgent[i].TaskList) == len(freeAgent[j].TaskList) {
+			return freeAgent[i].Resource.CPU > freeAgent[j].Resource.CPU
+		}
+		return len(freeAgent[i].TaskList) < len(freeAgent[j].TaskList)
+	})
+
 	var cpuTotal float64 = 0
 	r := make([]*respack.AgentResourceExternal, 0, 100)
-	for _, agent := range freeAgent {
+	for i, agent := range freeAgent {
 		blog.Infof("engine(%s) try to check free agent(%s:%.2f) with cluster(%s), "+
 			"current cpu(%.2f) with queue(%s)",
 			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.queueName)
@@ -1406,24 +1415,13 @@ func resourceSelector(
 		}
 
 		if agent.Resource.CPU <= 0 {
-			continue
+			blog.Infof("engine(%s) select the (%d)th agent(%s) with tasklist len(%d), queue",
+				EngineName, i, agent.Base.IP, len(agent.TaskList))
+			//continue
 		}
 
 		cpuTotal += agent.Resource.CPU
 		r = append(r, agent)
-		/*if if4onetask {
-
-		} else {
-			used := math.Min(c.maxCPU-cpuTotal, agent.Resource.CPU)
-			cpuTotal += used
-			r = append(r, &respack.AgentResourceExternal{
-				Base: agent.Base,
-				Resource: respack.Resource{
-					CPU: used,
-					Mem: used * 1024,
-				},
-			})
-		}*/
 
 		blog.Infof("engine(%s) select free agent(%s:%.2f) with cluster(%s), current(%.2f), target(%.2f~%.2f)",
 			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.leastCPU, c.maxCPU)

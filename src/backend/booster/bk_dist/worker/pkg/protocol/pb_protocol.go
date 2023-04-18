@@ -675,7 +675,7 @@ func EncodeEnsureWorkerReq() ([]protocol.Message, error) {
 	// kkk todo
 	ifok := true
 	cpuPercent, err := cpu.Percent(100*time.Millisecond, false)
-	if err == nil && len(cpuPercent) > 0 && cpuPercent[0] >= 0.75 {
+	if err == nil && len(cpuPercent) > 0 && cpuPercent[0] >= 75 {
 		ifok = false
 	}
 
@@ -698,7 +698,7 @@ func EncodeEnsureWorkerReq() ([]protocol.Message, error) {
 
 	// encode head
 	var filebuflen int64
-	cmdtype := protocol.PBCmdType_SYNCTIMERSP
+	cmdtype := protocol.PBCmdType_ENSUREWORKERRSP
 	pbhead := protocol.PBHead{
 		Version: &bkdistcmdversion,
 		Magic:   &bkdistcmdmagic,

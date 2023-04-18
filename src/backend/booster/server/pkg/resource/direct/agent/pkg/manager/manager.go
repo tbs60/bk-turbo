@@ -696,6 +696,7 @@ func (o *processManager) initBaseInfo() error {
 		Labels: map[string]string{
 			LabelKeyGOOS: runtime.GOOS,
 		},
+		TaskLimit: o.conf.AgentTaskLimit,
 	}
 
 	u, err := user.Current()
@@ -811,6 +812,7 @@ func (o *processManager) reportResourcekkk() error {
 	err := wsutil.WriteClientMessage(*conn, ws.OpText, data)
 	if err != nil {
 		blog.Errorf("ReportResource write failed : %v", err)
+		return err
 	}
 
 	return nil
