@@ -350,7 +350,9 @@ func (o *tcpManager) dealEnsureWorker(client *protocol.TCPClient, head *dcProtoc
 		return err
 	}
 
-	return handler.Handle(client, head, nil, time.Now(), "", nil)
+	isok := len(o.buffedcmds) < o.maxjobs
+
+	return handler.Handle(client, head, nil, time.Now(), "", nil, isok)
 }
 
 func (o *tcpManager) dealRemoteTaskCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
@@ -412,7 +414,7 @@ func (o *tcpManager) dealSyncTimeCmd(client *protocol.TCPClient, head *dcProtoco
 		return err
 	}
 
-	return handler.Handle(client, head, nil, time.Now(), "", nil)
+	return handler.Handle(client, head, nil, time.Now(), "", nil, true)
 }
 
 func (o *tcpManager) dealUnknownCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
@@ -426,7 +428,7 @@ func (o *tcpManager) dealUnknownCmd(client *protocol.TCPClient, head *dcProtocol
 
 	_, _ = handler.ReceiveBody(client, head, "", nil)
 
-	return handler.Handle(client, head, nil, time.Now(), "", nil)
+	return handler.Handle(client, head, nil, time.Now(), "", nil, true)
 }
 
 func (o *tcpManager) dealSendFileCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
@@ -463,7 +465,7 @@ func (o *tcpManager) dealSendFileCmd(client *protocol.TCPClient, head *dcProtoco
 	}()
 
 	//
-	err = handler.Handle(client, head, body, time.Now(), basedir, nil)
+	err = handler.Handle(client, head, body, time.Now(), basedir, nil, true)
 	return err
 }
 
@@ -499,7 +501,7 @@ func (o *tcpManager) dealCheckCacheCmd(client *protocol.TCPClient, head *dcProto
 	}()
 
 	//
-	err = handler.Handle(client, head, body, time.Now(), "", nil)
+	err = handler.Handle(client, head, body, time.Now(), "", nil, true)
 	return err
 }
 
@@ -572,7 +574,8 @@ func (o *tcpManager) dealBufferedCmd(cmd *buffedcmd) error {
 	}()
 
 	_ = os.MkdirAll(cmd.basedir, os.ModePerm)
-	err := cmd.handler.Handle(cmd.client, cmd.head, cmd.body, cmd.receivedtime, cmd.basedir, o.conf.CmdReplaceRules)
+	err := cmd.handler.Handle(cmd.client, cmd.head, cmd.body, cmd.receivedtime,
+		cmd.basedir, o.conf.CmdReplaceRules, true)
 
 	// nextcmd := o.popcmd()
 	// if nextcmd != nil {

@@ -45,7 +45,8 @@ func (h *Handle4EnsureWorker) Handle(client *protocol.TCPClient,
 	body interface{},
 	receivedtime time.Time,
 	basedir string,
-	cmdreplacerules []dcConfig.CmdReplaceRule) error {
+	cmdreplacerules []dcConfig.CmdReplaceRule,
+	isok bool) error {
 
 	go h.handle(client, receivedtime)
 	return nil

@@ -26,6 +26,7 @@ const (
 	AgentResourceCheckTime  = 20 * time.Second
 	AgentTaskCheckTime      = 10 * time.Second
 	AgentReportIntervalTime = 5 * time.Second
+	AgentConnCheckTime      = 15 * time.Second
 
 	FbuildVersionEnvKey = "FB_VERSION"
 )

@@ -52,7 +52,8 @@ func (h *Handle4SendFile) Handle(client *protocol.TCPClient,
 	body interface{},
 	receivedtime time.Time,
 	basedir string,
-	cmdreplacerules []dcConfig.CmdReplaceRule) error {
+	cmdreplacerules []dcConfig.CmdReplaceRule,
+	isok bool) error {
 	blog.Infof("handle with base dir:%s", basedir)
 	defer func() {
 		blog.Infof("handle out for base dir:%s", basedir)

@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -49,8 +50,10 @@ var (
 type WebsocketHandler struct {
 	conf          *config.ServerConfig
 	ConnectionMap map[string]*net.Conn
-	usage         []string
-	mgr           processManager.Manager
+	connLock      sync.RWMutex
+
+	usage []string
+	mgr   processManager.Manager
 }
 
 // WebsocketHandler : return new websocket handle
@@ -90,17 +93,22 @@ func (h *WebsocketHandler) init() error {
 }
 
 func (h *WebsocketHandler) initConnection() error {
+	fmt.Printf("connecting server......")
 	for _, usage := range h.usage {
 		url := TestBaseUrl + usage
-		fmt.Printf(" url is (%s)", url)
 		conn, _, _, err := ws.Dial(context.Background(), url)
 		if err != nil {
 			blog.Errorf("failed to create execute connection with error:(%v)", err)
 			return err
 		}
 		fmt.Printf("%s connection complete", usage)
+
+		h.connLock.Lock()
 		h.ConnectionMap[usage] = &conn
+		h.connLock.Unlock()
 	}
+
+	fmt.Printf("server connected")
 	return nil
 }
 
@@ -122,7 +130,7 @@ func (h *WebsocketHandler) Start() error {
 
 	for usage, conn := range h.ConnectionMap {
 		if conn != nil {
-			go h.handle(ctx, usage, conn)
+			go h.handle(ctx, usage)
 		}
 	}
 
@@ -140,36 +148,76 @@ func (h *WebsocketHandler) Start() error {
 	return nil
 }
 
-func (h *WebsocketHandler) handle(ctx context.Context, usage string, conn *net.Conn) {
+func (h *WebsocketHandler) connCheck(ctx context.Context) {
+	connCheckTick := time.NewTicker(types.AgentConnCheckTime)
+	defer connCheckTick.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-connCheckTick.C:
+			h.connLock.Lock()
+			defer h.connLock.Unlock()
+
+			needReconnect := false
+			for usage, conn := range h.ConnectionMap {
+				// check if conn is closed
+				if err := (*conn).SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+					blog.Errorf("% connection closed: %s, ready to reconnect", usage, err)
+					needReconnect = true
+					break
+				}
+			}
+
+			if needReconnect {
+				h.initConnection()
+			}
+		}
+
+	}
+}
+
+func (h *WebsocketHandler) handle(ctx context.Context, usage string) {
 	switch usage {
 	case common.ReportResource:
-		h.handleReportResource(ctx, conn)
+		h.handleReportResource(ctx, usage)
 	case common.ExecuteCommand:
-		h.handleExecuteCommand(ctx, conn)
+		h.handleExecuteCommand(ctx, usage)
 	default:
 		blog.Errorf("unknown conn usage : %s", usage)
 	}
 
 }
 
-func (h *WebsocketHandler) handleReportResource(ctx context.Context, conn *net.Conn) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+func (h *WebsocketHandler) handleReportResource(ctx context.Context, usage string) {
+	resourceReportTick := time.NewTicker(types.AgentReportIntervalTime)
+	defer resourceReportTick.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-resourceReportTick.C:
+			conn := h.getConn(usage)
+			if conn == nil {
+				blog.Errorf("%s usage conn is not ready", usage)
+				continue
+			}
+
+			h.mgr.ReportResource(conn)
+
 		}
+
 	}
 }
 
-func (h *WebsocketHandler) handleExecuteCommand(ctx context.Context, conn *net.Conn) {
+func (h *WebsocketHandler) handleExecuteCommand(ctx context.Context, usage string) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	ch := make(chan *types.NotifyAgentData, 1)
-	go listenExecuteCommand(ctx, conn, ch)
+	go h.listenExecuteCommand(ctx, usage, ch)
 
 	for {
 		select {
@@ -177,6 +225,13 @@ func (h *WebsocketHandler) handleExecuteCommand(ctx context.Context, conn *net.C
 			return
 		case cmd := <-ch:
 			h.mgr.ExecuteCommand(cmd)
+
+			if cmd.CmdType == types.CmdLaunch {
+				conn := h.getConn(common.ReportResource)
+				if conn != nil {
+					go h.mgr.ReportResource(conn)
+				}
+			}
 		}
 	}
 }
@@ -195,8 +250,15 @@ func (h *WebsocketHandler) clean() {
 	}
 }
 
-func listenExecuteCommand(ctx context.Context, conn *net.Conn, ch chan<- *types.NotifyAgentData) {
+func (h *WebsocketHandler) listenExecuteCommand(ctx context.Context, usage string, ch chan<- *types.NotifyAgentData) {
 	for {
+		conn := h.getConn(usage)
+		if conn == nil {
+			blog.Errorf("%s usage conn is not ready", usage)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
 		select {
 		case <-ctx.Done():
 			return
@@ -226,6 +288,17 @@ func listenExecuteCommand(ctx context.Context, conn *net.Conn, ch chan<- *types.
 			ch <- &cmd
 		}
 	}
+}
+
+func (h *WebsocketHandler) getConn(usage string) *net.Conn {
+	h.connLock.RLock()
+	defer h.connLock.RUnlock()
+
+	conn, ok := h.ConnectionMap[usage]
+	if !ok {
+		return nil
+	}
+	return conn
 }
 
 func sysSignalHandler(cancel context.CancelFunc, h *WebsocketHandler) {

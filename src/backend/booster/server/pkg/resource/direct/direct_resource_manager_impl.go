@@ -395,9 +395,7 @@ func (d *directResourceManager) removeTaskFromList(agentIP string, resBatchID st
 }
 
 func (d *directResourceManager) updateTaskList(resBathchID string, res *AgentResourceExternal) error {
-	d.resourceLock.Lock()
-	defer d.resourceLock.Unlock()
-
+	// resource lock is already locked
 	for _, r := range d.resource {
 		if r.Agent.Base.IP != res.Base.IP {
 			continue
@@ -908,9 +906,6 @@ func (d *directResourceManager) getAllocatedResourceRecord(userID string,
 func (d *directResourceManager) getAllFreeResource(userID string) ([]*AgentResourceExternal, error) {
 	//blog.Infof("getAllFreeResource with userID[%s]", userID)
 	ress := []*AgentResourceExternal{}
-
-	d.resourceLock.RLock()
-	defer d.resourceLock.RUnlock()
 
 	for _, v := range d.resource {
 		// 需要确认下 free 里面的字段是否完整，如果不完整，需要补齐

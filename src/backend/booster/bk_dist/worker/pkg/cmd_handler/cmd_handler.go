@@ -28,7 +28,8 @@ type Handler interface {
 		body interface{},
 		receivedtime time.Time,
 		basedir string,
-		cmdreplacerules []dcConfig.CmdReplaceRule) error
+		cmdreplacerules []dcConfig.CmdReplaceRule,
+		ensureOK bool) error
 }
 
 var handlemap map[dcProtocol.PBCmdType]Handler

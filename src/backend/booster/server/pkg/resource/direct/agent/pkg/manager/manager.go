@@ -43,7 +43,7 @@ import (
 
 // Manager : to report resouce and manage local application
 type Manager interface {
-	ReportResource() error
+	ReportResource(conn *net.Conn) error
 	ExecuteCommand(res *types.NotifyAgentData) error
 	// TODO : 缺少通知agent资源分配和释放的命令，先简单按资源独占处理
 	Clean() error
@@ -130,8 +130,8 @@ func (o *processManager) init() error {
 }
 
 // ReportResource report resource status to logs
-func (o *processManager) ReportResource() error {
-	return o.reportResource()
+func (o *processManager) ReportResource(conn *net.Conn) error {
+	return o.reportResourcekkk(conn)
 }
 
 // ExecuteCommand run command
@@ -174,10 +174,7 @@ func (o *processManager) ExecuteCommand(res *types.NotifyAgentData) error {
 		o.addCommand(res.UserID, res.ResBatchID, command)
 
 		// ++ by tomtian 20190422, to report result immediately
-		// kkk
 		//go o.reportResource()
-		go o.reportResourcekkk()
-		// --
 
 		return nil
 	} else if res.CmdType == types.CmdRelease {
@@ -317,12 +314,12 @@ func (o *processManager) Run() error {
 	}
 
 	o.ctx, o.cancel = context.WithCancel(context.Background())
-	go o.start(o.ctx)
+	//go o.start(o.ctx)
 
 	return nil
 }
 
-//
+/*
 func (o *processManager) start(pCtx context.Context) {
 	blog.Infof("selfresourcehandle start")
 	ctx, cancel := context.WithCancel(pCtx)
@@ -339,7 +336,7 @@ func (o *processManager) start(pCtx context.Context) {
 			o.reportResourcekkk()
 		}
 	}
-}
+}*/
 
 func (o *processManager) waitToKillOneApplication(processName string) error {
 	blog.Infof("wait application %s to kill...", processName)
@@ -785,7 +782,7 @@ func (o *processManager) reportResource() error {
 	return nil
 }
 
-func (o *processManager) reportResourcekkk() error {
+func (o *processManager) reportResourcekkk(conn *net.Conn) error {
 	blog.Infof("ReportResourcekkk for city[%s] ip[%s]...", o.conf.City, o.conf.LocalConfig.LocalIP)
 
 	o.updateTotalResCPU()
@@ -802,15 +799,9 @@ func (o *processManager) reportResourcekkk() error {
 	var data []byte
 	_ = codec.EncJSON(reportobj, &data)
 
-	conn, ok := o.connMap[localCommon.ReportResource]
-	if !ok {
-		blog.Errorf("connection reportresource is not enable")
-		// to do :
-		return nil
-	}
-
 	err := wsutil.WriteClientMessage(*conn, ws.OpText, data)
 	if err != nil {
+
 		blog.Errorf("ReportResource write failed : %v", err)
 		return err
 	}
