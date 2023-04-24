@@ -723,6 +723,12 @@ func (de *distccMacEngine) getServerIPList() []string {
 	return r
 }
 
+// ListAgentResource get agent resource from direct resource manager
+func (fe *distccMacEngine) ListAgentInfo() ([]engine.AgentBriefInfo, error) {
+	var info []engine.AgentBriefInfo
+	return info, nil
+}
+
 func (de *distccMacEngine) resourceSelector(
 	freeAgent []*respack.AgentResourceExternal,
 	condition interface{},

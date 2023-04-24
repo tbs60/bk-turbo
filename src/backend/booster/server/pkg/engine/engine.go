@@ -79,6 +79,9 @@ type Engine interface {
 
 	// GetWhitelistBasicTable return the DB instance where TableWhitelistBasic is
 	GetWhitelistBasicTable() *gorm.DB
+
+	// ListAgentResource get agent resource from direct resource manager
+	ListAgentInfo() ([]AgentBriefInfo, error)
 }
 
 // Engine type name

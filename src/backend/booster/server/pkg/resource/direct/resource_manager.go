@@ -45,6 +45,9 @@ type HandleWithUser interface {
 	ExecuteCommand(ip string, resBatchID string, cmd *Command) error
 	// 返回资源id关联的command列表
 	ListCommands(resBatchID string) ([]*CommandResultInfo, error)
+
+	// 查询所有agent资源信息
+	ListAgentResource() ([]*AgentResource, error)
 }
 
 // CmdType : cmd type

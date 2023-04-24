@@ -52,7 +52,7 @@ func (s *selector) Run(ctx context.Context) error {
 
 func (s *selector) start() {
 	blog.Infof("selector start")
-
+	ticker := time.NewTicker(selectorDetectDirectResourceTime)
 	// init queueChanMap
 	for _, info := range s.queueInfoList {
 		c := make(chan bool, 100)
@@ -74,7 +74,47 @@ func (s *selector) start() {
 		case <-s.ctx.Done():
 			blog.Warnf("select shutdown")
 			return
+		case <-ticker.C:
+			s.detectNewQueue()
 		}
+	}
+}
+
+func (s *selector) detectNewQueue() {
+	blog.Infof("selector: ready to detect new queue")
+	egn, err := s.mgr.layer.GetEngineByTypeName("disttask")
+	if err != nil {
+		blog.Errorf("selector: get engine failed: %v", err)
+	}
+
+	agentRes, err := egn.ListAgentInfo()
+	for _, agent := range agentRes {
+		blog.Infof("kkk detect agent get (%s) queue(%s)", agent.IP, agent.Cluster)
+		if agent.UpdatedAt.Add(1 * time.Minute).Before(time.Now()) {
+			continue
+		}
+
+		for _, q := range s.queueInfoList {
+			if q.QueueName == agent.Cluster {
+				continue
+			}
+		}
+		blog.Infof("selector: ready to add new queue(%s)", agent.Cluster)
+		err := s.layer.AddStagingTaskQueue(egn.Name(), agent.Cluster)
+		if err != nil {
+			blog.Errorf("selector: add new queue(%s) failed: %v", agent.Cluster, err)
+			continue
+		}
+
+		info := engine.QueueBriefInfo{
+			EngineName: egn.Name(),
+			QueueName:  agent.Cluster,
+		}
+		c := make(chan bool, 100)
+		s.queueInfoList = append(s.queueInfoList, info)
+		s.queueChanMap[info] = c
+
+		go s.picker(info, c)
 	}
 }
 

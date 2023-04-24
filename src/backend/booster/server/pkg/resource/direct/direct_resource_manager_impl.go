@@ -28,6 +28,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/metric/controllers"
+	commonMySQL "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/mysql"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
 	localCommon "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/common"
@@ -1324,6 +1325,18 @@ func (h *handleWithUser) ListCommands(resBatchID string) ([]*CommandResultInfo, 
 	}
 
 	return nil, fmt.Errorf("drm: direct resource manager is nil")
+}
+
+// ListAgentResource list agent上报的资源信息
+func (h *handleWithUser) ListAgentResource() ([]*AgentResource, error) {
+	opts := commonMySQL.NewListOptions()
+	res, err := h.mgr.mysql.ListAgentResource(opts)
+	if err != nil {
+		blog.Errorf("drm: list agent resource failed: %v", err)
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func randomString(length uint16) string {

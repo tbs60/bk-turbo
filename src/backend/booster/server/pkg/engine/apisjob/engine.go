@@ -731,6 +731,12 @@ func (ae *apisEngine) updateTask(task *apisTask) error {
 	return nil
 }
 
+// ListAgentResource get agent resource from direct resource manager
+func (fe *apisEngine) ListAgentInfo() ([]engine.AgentBriefInfo, error) {
+	var info []engine.AgentBriefInfo
+	return info, nil
+}
+
 func (ae *apisEngine) resourceSelector(
 	freeAgent []*direct.AgentResourceExternal,
 	condition interface{},

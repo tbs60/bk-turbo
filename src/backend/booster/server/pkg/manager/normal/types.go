@@ -23,8 +23,9 @@ const (
 	layerCleanLockTimeGap       = 10 * time.Minute
 	layerCleanReleasedTaskGap   = 10 * time.Minute
 
-	selectorSelectSleepTime     = 200 * time.Millisecond
-	selectorLogQueueStatGapTime = 10 * time.Second
+	selectorSelectSleepTime          = 200 * time.Millisecond
+	selectorLogQueueStatGapTime      = 10 * time.Second
+	selectorDetectDirectResourceTime = 5 * time.Second
 
 	trackerCheckGapTime = 1 * time.Second
 	trackerTrackGapTime = 1 * time.Second

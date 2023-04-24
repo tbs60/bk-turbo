@@ -201,6 +201,12 @@ func (de *distccEngine) DegradeTask(taskID string) error {
 	return de.degradeTask(taskID)
 }
 
+// ListAgentResource get agent resource from direct resource manager
+func (fe *distccEngine) ListAgentInfo() ([]engine.AgentBriefInfo, error) {
+	var info []engine.AgentBriefInfo
+	return info, nil
+}
+
 // LaunchDone check if the launch is done
 func (de *distccEngine) LaunchDone(taskID string) (bool, error) {
 	return de.launchDone(taskID)

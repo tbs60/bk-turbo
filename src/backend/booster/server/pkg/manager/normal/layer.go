@@ -61,6 +61,9 @@ type TaskBasicLayer interface {
 
 	// put staging task into next staging list
 	PushTaskNextQueue(tb *engine.TaskBasic) error
+
+	// AddStagingTaskQueue add new staging queue
+	AddStagingTaskQueue(engineName engine.TypeName, queueName string) error
 }
 
 // NewDefaultTaskBasicLayer get a new default basic layer with engine maps.
@@ -294,6 +297,18 @@ func (tc *taskBasicLayer) GetTaskQueueGroup(engineName engine.TypeName) (*engine
 		return nil, err
 	}
 	return qg, nil
+}
+
+func (tc *taskBasicLayer) AddStagingTaskQueue(engineName engine.TypeName, queueName string) error {
+	qg, err := tc.getQueueGroup(engineName)
+	if err != nil {
+		blog.Errorf("layer: add task queue to engine(%s) failed: %v", engineName, err)
+		return err
+	}
+
+	qg.AddQueue(queueName)
+
+	return nil
 }
 
 func (tc *taskBasicLayer) getTaskBasic(taskID string) (*engine.TaskBasic, error) {

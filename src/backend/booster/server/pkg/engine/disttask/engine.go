@@ -709,6 +709,24 @@ func (de *disttaskEngine) degradeTask(taskID string) error {
 	return nil
 }
 
+func (de *disttaskEngine) ListAgentInfo() ([]engine.AgentBriefInfo, error) {
+	var info []engine.AgentBriefInfo
+
+	res, err := de.directMgr.ListAgentResource()
+	if err != nil {
+		blog.Errorf("engine(%s) list agent resource failed: %v", err)
+		return info, err
+	}
+	for _, r := range res {
+		info = append(info, engine.AgentBriefInfo{
+			Cluster:   r.Cluster,
+			IP:        r.IP,
+			UpdatedAt: r.UpdatedAt,
+		})
+	}
+	return info, nil
+}
+
 func (de *disttaskEngine) launchDone(taskID string) (bool, error) {
 	task, err := de.getTask(taskID)
 	if err != nil {

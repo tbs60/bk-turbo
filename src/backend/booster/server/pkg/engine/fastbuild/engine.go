@@ -210,6 +210,12 @@ func (fe *fastbuildEngine) onSubTaskDoneMessage(msg *Message) error {
 	return nil
 }
 
+// ListAgentResource get agent resource from direct resource manager
+func (fe *fastbuildEngine) ListAgentInfo() ([]engine.AgentBriefInfo, error) {
+	var info []engine.AgentBriefInfo
+	return info, nil
+}
+
 // collect the task data, record the stats from server side.
 func (fe *fastbuildEngine) CollectTaskData(tb *engine.TaskBasic) error {
 	return fe.collectTaskData(tb)

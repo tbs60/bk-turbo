@@ -13,6 +13,9 @@ import (
 	"container/list"
 	"sync"
 	"sync/atomic"
+	"time"
+
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
 // StagingTaskQueue maintains a priority-driven queue for TaskBasic
@@ -252,6 +255,20 @@ func (tqg *TaskQueueGroup) Exist(taskID string) bool {
 	return false
 }
 
+// AddQueue add new queue to task queue group
+func (tqg *TaskQueueGroup) AddQueue(queueName string) error {
+	tqg.Lock()
+	defer tqg.Unlock()
+
+	if _, ok := tqg.queue[queueName]; ok {
+		blog.Infof("queue: add queue (%s) is exist", queueName)
+	} else {
+		tqg.queue[queueName] = NewStagingTaskQueue()
+	}
+
+	return nil
+}
+
 // QueueBriefInfo describe a brief information of a queue
 // it is a queue - engine pair
 type QueueBriefInfo struct {
@@ -267,3 +284,9 @@ const (
 	QueueShareTypeOnlyGiveToPublic                  // 是否允许将当前处理不了的任务放置到公共队列中，即是否用其它组的资源来为当前组的任务进行加速
 	QueueShareTypeNoneAllowed
 )
+
+type AgentBriefInfo struct {
+	Cluster   string
+	IP        string
+	UpdatedAt time.Time
+}
