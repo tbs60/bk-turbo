@@ -149,6 +149,7 @@ func (h *WebsocketHandler) Start() error {
 }
 
 func (h *WebsocketHandler) connCheck(ctx context.Context) {
+	blog.Infof("start checking conn")
 	connCheckTick := time.NewTicker(types.AgentConnCheckTime)
 	defer connCheckTick.Stop()
 

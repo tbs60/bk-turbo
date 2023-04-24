@@ -1826,8 +1826,10 @@ func (m *Mgr) handleWorkerBusy(host *dcProtocol.Host) {
 		if !w.host.Equal(host) {
 			continue
 		}
-		m.resource.workerDead(w)
-		time.Sleep(5 * time.Second)
-		m.resource.recoverDeadWorker(w)
+		if !w.dead {
+			m.resource.workerDead(w)
+			time.Sleep(5 * time.Second)
+			m.resource.recoverDeadWorker(w)
+		}
 	}
 }

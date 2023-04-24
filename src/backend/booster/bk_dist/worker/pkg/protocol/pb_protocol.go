@@ -25,7 +25,6 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/cache"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
-	"github.com/shirou/gopsutil/cpu"
 
 	"github.com/gogo/protobuf/proto"
 )
@@ -668,19 +667,12 @@ func EncodeBKSyncTimeRsp(receivedtime time.Time) ([]protocol.Message, error) {
 }
 
 // EncodeEnsureWorkerReq encode worker status to message
-func EncodeEnsureWorkerReq() ([]protocol.Message, error) {
+func EncodeEnsureWorkerReq(isok bool) ([]protocol.Message, error) {
 	blog.Debugf("encode synctime request to message now")
 
 	// encode body and file to message
-	// kkk todo
-	ifok := true
-	cpuPercent, err := cpu.Percent(100*time.Millisecond, false)
-	if err == nil && len(cpuPercent) > 0 && cpuPercent[0] >= 75 {
-		ifok = false
-	}
-
 	pbbody := protocol.PBBodyEnsureWorkerRsp{
-		Ifok: &ifok,
+		Ifok: &isok,
 	}
 
 	bodydata, err := proto.Marshal(&pbbody)

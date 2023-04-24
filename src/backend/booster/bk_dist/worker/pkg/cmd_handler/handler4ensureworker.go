@@ -48,13 +48,13 @@ func (h *Handle4EnsureWorker) Handle(client *protocol.TCPClient,
 	cmdreplacerules []dcConfig.CmdReplaceRule,
 	isok bool) error {
 
-	go h.handle(client, receivedtime)
+	go h.handle(client, receivedtime, isok)
 	return nil
 }
 
 // Handle to handle this cmd
 func (h *Handle4EnsureWorker) handle(client *protocol.TCPClient,
-	receivedtime time.Time) error {
+	receivedtime time.Time, isok bool) error {
 	blog.Infof("handle to sync time")
 	defer func() {
 		blog.Infof("handle out for sync time")
@@ -62,7 +62,7 @@ func (h *Handle4EnsureWorker) handle(client *protocol.TCPClient,
 	}()
 
 	// encode response to messages
-	messages, err := protocol.EncodeEnsureWorkerReq()
+	messages, err := protocol.EncodeEnsureWorkerReq(isok)
 	if err != nil {
 		blog.Errorf("failed to encode rsp to messages for error:%v", err)
 	}

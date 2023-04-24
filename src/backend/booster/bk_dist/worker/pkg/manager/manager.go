@@ -350,7 +350,10 @@ func (o *tcpManager) dealEnsureWorker(client *protocol.TCPClient, head *dcProtoc
 		return err
 	}
 
+	o.bufflock.RLock()
 	isok := len(o.buffedcmds) < o.maxjobs
+	blog.Infof("kkk buffer len(%d) , max (%d)", len(o.buffedcmds), o.maxjobs)
+	o.bufflock.RUnlock()
 
 	return handler.Handle(client, head, nil, time.Now(), "", nil, isok)
 }
