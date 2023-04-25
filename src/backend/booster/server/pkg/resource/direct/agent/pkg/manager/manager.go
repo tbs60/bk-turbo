@@ -811,7 +811,7 @@ func (o *processManager) reportResourcekkk(conn *net.Conn) error {
 
 func (o *processManager) updateTotalResCPU() error {
 	if !o.conf.UpdateCPURealtime {
-		blog.Infof("do not need update cpu resource by cpu usage")
+		//blog.Infof("do not need update cpu resource by cpu usage")
 		return nil
 	}
 

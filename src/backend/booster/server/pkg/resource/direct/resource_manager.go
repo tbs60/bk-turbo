@@ -47,7 +47,7 @@ type HandleWithUser interface {
 	ListCommands(resBatchID string) ([]*CommandResultInfo, error)
 
 	// 查询所有agent资源信息
-	ListAgentResource() ([]*AgentResource, error)
+	ListAgentResource() ([]oneagentResource, error)
 }
 
 // CmdType : cmd type

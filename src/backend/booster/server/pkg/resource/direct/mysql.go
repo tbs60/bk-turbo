@@ -68,7 +68,6 @@ func (ar AllocatedResource) TableName() string {
 // Also, the resource get from mysql row will be wrap into struct and return to caller.
 type MySQL interface {
 	PutAgentResource(ar *AgentResource) error
-	ListAgentResource(opts commonMySQL.ListOptions) ([]*AgentResource, error)
 
 	ListAllocateResource(opts commonMySQL.ListOptions) ([]*AllocatedResource, int64, error)
 	GetAllocatedResource(userID, resourceBatchID string) (*AllocatedResource, error)
@@ -136,23 +135,6 @@ func (m *defaultMysql) ensureTables(tables ...interface{}) error {
 // PutAgentResource save agent resource into db
 func (m *defaultMysql) PutAgentResource(ar *AgentResource) error {
 	return m.db.Model(&AgentResource{}).Save(ar).Error
-}
-
-// GetAgentResource get agent resource from db
-func (m *defaultMysql) ListAgentResource(opts commonMySQL.ListOptions) ([]*AgentResource, error) {
-	var res []*AgentResource
-	db := opts.AddWhere(m.db.Model(&AgentResource{}))
-	db = opts.AddOffsetLimit(db)
-	db = opts.AddSelector(db)
-	db = opts.AddOrder(db)
-	db = db.Find(&res)
-
-	if err := db.Error; err != nil {
-		blog.Errorf("drm: mysql list agent resource failed opts(%v): %v", opts, err)
-		return nil, err
-	}
-
-	return res, nil
 }
 
 // ListAllocateResource list allocated resources from db

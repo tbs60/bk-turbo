@@ -134,13 +134,15 @@ func (h *WebsocketHandler) Start() error {
 		}
 	}
 
-	ticker := time.NewTicker(10 * time.Second)
+	connCheckTick := time.NewTicker(types.AgentConnCheckTime)
+	defer connCheckTick.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			break
-		case <-ticker.C:
-			// do something
+		case <-connCheckTick.C:
+			h.connCheck(ctx)
 		}
 
 	}
@@ -150,33 +152,22 @@ func (h *WebsocketHandler) Start() error {
 
 func (h *WebsocketHandler) connCheck(ctx context.Context) {
 	blog.Infof("start checking conn")
-	connCheckTick := time.NewTicker(types.AgentConnCheckTime)
-	defer connCheckTick.Stop()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-connCheckTick.C:
-			h.connLock.Lock()
-			defer h.connLock.Unlock()
-
-			needReconnect := false
-			for usage, conn := range h.ConnectionMap {
-				// check if conn is closed
-				if err := (*conn).SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
-					blog.Errorf("% connection closed: %s, ready to reconnect", usage, err)
-					needReconnect = true
-					break
-				}
-			}
-
-			if needReconnect {
-				h.initConnection()
-			}
+	needReconnect := false
+	for usage, conn := range h.ConnectionMap {
+		// check if conn is closed
+		if err := (*conn).SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+			blog.Errorf("% connection closed: %s, ready to reconnect", usage, err)
+			needReconnect = true
+			break
 		}
-
 	}
+
+	if needReconnect {
+		blog.Infof("ready to reconnect server")
+		h.initConnection()
+	}
+
 }
 
 func (h *WebsocketHandler) handle(ctx context.Context, usage string) {
@@ -271,7 +262,7 @@ func (h *WebsocketHandler) listenExecuteCommand(ctx context.Context, usage strin
 				return
 			}
 			if op == ws.OpContinuation {
-				blog.Errorf("drm: executeHandler quit with :%v", op)
+				//blog.Errorf("drm: executeHandler quit with :%v", op)
 				time.Sleep(2 * time.Second)
 				continue
 			}

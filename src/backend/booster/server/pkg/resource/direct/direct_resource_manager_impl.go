@@ -28,7 +28,6 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpclient"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/http/httpserver"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/metric/controllers"
-	commonMySQL "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/mysql"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/config"
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
 	localCommon "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/common"
@@ -325,6 +324,23 @@ func (d *directResourceManager) addRes(resBatchID string, condition interface{})
 		}
 	}
 	d.resourceLock.RUnlock()
+	return res, nil
+}
+
+// getResourceInfo : 获取agent上报信息
+func (d *directResourceManager) getResourceInfo() ([]oneagentResource, error) {
+	var res []oneagentResource
+	d.resourceLock.RLock()
+	defer d.resourceLock.RUnlock()
+
+	for _, r := range d.resource {
+		res = append(res, oneagentResource{
+			Agent:       r.Agent,
+			Update:      r.Update,
+			WorkerReady: r.WorkerReady,
+			TaskList:    r.TaskList,
+		})
+	}
 	return res, nil
 }
 
@@ -1318,6 +1334,15 @@ func (h *handleWithUser) ExecuteCommand(ip string, resBatchID string, cmd *Comma
 	return fmt.Errorf("drm: direct resource manager is nil")
 }
 
+// ListAgentResource list agent上报的资源信息
+func (h *handleWithUser) ListAgentResource() ([]oneagentResource, error) {
+	if h.mgr != nil {
+		return h.mgr.getResourceInfo()
+	}
+
+	return nil, fmt.Errorf("drm: direct resource manager is nil")
+}
+
 // ListCommands list 指定的batchID所对应资源上的命令信息
 func (h *handleWithUser) ListCommands(resBatchID string) ([]*CommandResultInfo, error) {
 	if h.mgr != nil {
@@ -1325,18 +1350,6 @@ func (h *handleWithUser) ListCommands(resBatchID string) ([]*CommandResultInfo, 
 	}
 
 	return nil, fmt.Errorf("drm: direct resource manager is nil")
-}
-
-// ListAgentResource list agent上报的资源信息
-func (h *handleWithUser) ListAgentResource() ([]*AgentResource, error) {
-	opts := commonMySQL.NewListOptions()
-	res, err := h.mgr.mysql.ListAgentResource(opts)
-	if err != nil {
-		blog.Errorf("drm: list agent resource failed: %v", err)
-		return nil, err
-	}
-
-	return res, nil
 }
 
 func randomString(length uint16) string {

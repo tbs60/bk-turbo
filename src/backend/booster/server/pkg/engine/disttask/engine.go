@@ -719,9 +719,9 @@ func (de *disttaskEngine) ListAgentInfo() ([]engine.AgentBriefInfo, error) {
 	}
 	for _, r := range res {
 		info = append(info, engine.AgentBriefInfo{
-			Cluster:   r.Cluster,
-			IP:        r.IP,
-			UpdatedAt: r.UpdatedAt,
+			Cluster:   r.Agent.Base.Cluster,
+			IP:        r.Agent.Base.IP,
+			UpdatedAt: time.Unix(r.Update, 0),
 		})
 	}
 	return info, nil
