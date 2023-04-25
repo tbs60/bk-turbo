@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,6 +99,8 @@ type UBTTool struct {
 	// settings
 	projectSettingFile string
 	settings           *shaderToolComm.ApplyParameters
+
+	history *common.UE4Action
 }
 
 // Run run the tool
@@ -142,11 +145,20 @@ func (h *UBTTool) runActions() error {
 		return nil
 	}
 
+	h.history, _ = loadHistory()
+	if h.history != nil {
+		sort.Sort(ByDuration(h.history.Actions))
+		blog.Debugf("UBTTool: history:%+v", h.history.Actions)
+	}
+
 	all, err := resolveActionJSON(h.flags.ActionChainFile)
 	if err != nil {
 		blog.Warnf("UBTTool: failed to resolve %s with error:%v", h.flags.ActionChainFile, err)
 		return err
 	}
+
+	h.updateDuration(h.history, all)
+
 	// for debug
 	blog.Debugf("UBTTool: all actions:%+v", all)
 
@@ -172,6 +184,10 @@ func (h *UBTTool) runActions() error {
 	}
 
 	blog.Debugf("UBTTool: success to execute all %d actions", len(h.allactions))
+
+	// dump history data now
+	saveToHistory(all)
+
 	return nil
 }
 
@@ -216,7 +232,7 @@ func (h *UBTTool) executeActions() error {
 				blog.Errorf("UBTTool: %v", err)
 				return err
 			}
-			h.onActionFinished(r.Index, r.Exitcode)
+			h.onActionFinished(r)
 			if h.finished {
 				blog.Infof("UBTTool: all actions finished")
 				return nil
@@ -272,6 +288,31 @@ func (h *UBTTool) executeActions() error {
 
 // 	return exe
 // }
+
+func (h *UBTTool) updateDuration(history, current *common.UE4Action) error {
+	if history == nil || current == nil {
+		return nil
+	}
+
+	for i, c := range current.Actions {
+		found := false
+		for _, ha := range history.Actions {
+			if c.Equal(ha) {
+				found = true
+				if len(ha.HistoryDuration) > 0 {
+					current.Actions[i].HistoryDuration = []int64{ha.HistoryDuration[len(ha.HistoryDuration)-1]}
+				}
+				break
+			}
+		}
+		if !found {
+			blog.Debugf("not found history record for action:%v", c)
+		}
+	}
+
+	return nil
+
+}
 
 // to simply print log
 func (h *UBTTool) analyzeActions(actions []common.Action) error {
@@ -376,6 +417,7 @@ func (h *UBTTool) selectActionsToExecute() error {
 func (h *UBTTool) selectReadyAction() int {
 	index := -1
 	followers := -1
+	var duration int64
 
 	// select ready action which is not running and has most followers
 	if h.flags.MostDepentFirst {
@@ -388,17 +430,29 @@ func (h *UBTTool) selectReadyAction() int {
 				}
 			}
 		}
-	} else { // select first action which is not running
+	} else {
 		for i := range h.readyactions {
 			if !h.readyactions[i].Running {
-				index = i
-				break
+				if index == -1 {
+					index = i
+					if len(h.readyactions[i].HistoryDuration) > 0 {
+						duration = h.readyactions[i].HistoryDuration[0]
+					}
+					continue
+				}
+
+				if len(h.readyactions[i].HistoryDuration) > 0 &&
+					h.readyactions[i].HistoryDuration[0] > duration &&
+					h.readyactions[i].HistoryDuration[0] > 120 {
+					index = i
+					duration = h.readyactions[i].HistoryDuration[0]
+				}
 			}
 		}
 	}
 
 	if index >= 0 {
-		blog.Infof("UBTTool: selected global index %s with %d followers", h.readyactions[index].Index, followers)
+		blog.Infof("UBTTool: selected global index %s with %d followers duration:%d", h.readyactions[index].Index, followers, duration)
 		if h.readyactions[index].IsCompile && h.readyactions[index].ModulePath != "" {
 			h.moduleselected[h.readyactions[index].ModulePath]++
 		}
@@ -409,6 +463,7 @@ func (h *UBTTool) selectReadyAction() int {
 func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.Actionresult) error {
 	blog.Infof("UBTTool: ready execute actions:%+v", action)
 
+	start := time.Now()
 	fullargs := []string{action.Cmd}
 	args, _ := shlex.Split(replaceWithNextExclude(action.Arg, '\\', "\\\\", []byte{'"'}))
 	fullargs = append(fullargs, args...)
@@ -450,6 +505,8 @@ func (h *UBTTool) executeOneAction(action common.Action, actionchan chan common.
 		Errormsg:  "",
 		Exitcode:  retcode,
 		Err:       err,
+		StartTime: start,
+		EndTime:   time.Now(),
 	}
 
 	actionchan <- r
@@ -479,7 +536,9 @@ func (h *UBTTool) getReadyActions() error {
 }
 
 // update all actions and ready actions
-func (h *UBTTool) onActionFinished(index string, exitcode int) error {
+func (h *UBTTool) onActionFinished(r common.Actionresult) error {
+	index := r.Index
+	exitcode := r.Exitcode
 	blog.Infof("UBTTool: action %s finished with exitcode %d", index, exitcode)
 
 	h.finishednumberlock.Lock()
@@ -514,6 +573,8 @@ func (h *UBTTool) onActionFinished(index string, exitcode int) error {
 		// update status
 		if v.Index == index {
 			h.allactions[i].Finished = true
+			h.allactions[i].StartTime = r.StartTime
+			h.allactions[i].EndTime = r.EndTime
 			break
 		}
 	}

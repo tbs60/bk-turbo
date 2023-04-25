@@ -125,6 +125,13 @@ func GetPumpCacheDir() string {
 	return dir
 }
 
+// GetHistoryDir get the history dir
+func GetHistoryDir() string {
+	dir := path.Join(GetRuntimeDir(), "history")
+	_ = os.MkdirAll(dir, os.ModePerm)
+	return dir
+}
+
 // GetRecordDir get the record dir
 func GetRecordDir() string {
 	dir := filepath.Join(GetGlobalDir(), "record")

@@ -10,6 +10,8 @@
 package common
 
 import (
+	"time"
+
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/env"
 	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
@@ -36,6 +38,15 @@ type Action struct {
 	IsCompile  bool
 	ModulePath string
 	Desc       string
+	// 记录历史时长，保留最近10次的
+	HistoryDuration []int64 `json:"historyduration"`
+	// 本次的开始和结束时间
+	StartTime time.Time
+	EndTime   time.Time
+}
+
+func (a Action) Equal(other Action) bool {
+	return a.Arg == other.Arg && a.Cmd == other.Cmd
 }
 
 // UE4Action to desc ubt actions
@@ -52,6 +63,8 @@ type Actionresult struct {
 	Errormsg  string
 	Exitcode  int
 	Err       error
+	StartTime time.Time
+	EndTime   time.Time
 }
 
 func uniqueAndCheck(strlist []string, allindex map[string]bool) []string {

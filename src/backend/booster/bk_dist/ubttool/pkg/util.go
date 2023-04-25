@@ -11,13 +11,22 @@ package pkg
 
 import (
 	"io/ioutil"
+	"os"
+	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync/atomic"
 
+	dcFile "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/file"
+	dcUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/util"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/ubttool/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/codec"
+)
+
+const (
+	historyFile = "bk_ubt_tool_actions_hitory.json"
 )
 
 func defaultCPULimit(custom int) int {
@@ -49,6 +58,87 @@ func resolveActionJSON(filename string) (*common.UE4Action, error) {
 	blog.Debugf("%+v", t)
 
 	return &t, nil
+}
+
+func loadHistory() (*common.UE4Action, error) {
+	dir := dcUtil.GetHistoryDir()
+	if dcFile.Stat(dir).Exist() {
+		filename := filepath.Join(dir, historyFile)
+		if dcFile.Stat(filename).Exist() {
+			return resolveActionJSON(filename)
+		} else {
+			return nil, ErrorHistoryFileNotExisted
+		}
+	} else {
+		return nil, ErrorHistoryDirNotExisted
+	}
+}
+
+func saveToHistory(current *common.UE4Action) error {
+	if current == nil {
+		return nil
+	}
+
+	// 如果有多个tool同时修改，有可能会写乱数据，但这个概率很小，先忽略
+	dir := dcUtil.GetHistoryDir()
+	if !dcFile.Stat(dir).Exist() {
+		return ErrorHistoryDirNotExisted
+	}
+
+	var history *common.UE4Action
+	filename := filepath.Join(dir, historyFile)
+	history, _ = loadHistory()
+
+	if history == nil {
+		for i := range current.Actions {
+			duration := current.Actions[i].EndTime.Unix() - current.Actions[i].StartTime.Unix()
+			current.Actions[i].HistoryDuration = []int64{duration}
+		}
+		history = current
+	} else {
+		newActions := make([]common.Action, 0, 0)
+		for _, c := range current.Actions {
+			found := false
+			for j, h := range history.Actions {
+				if c.Equal(h) {
+					if len(h.HistoryDuration) >= 10 {
+						history.Actions[j].HistoryDuration = history.Actions[j].HistoryDuration[len(h.HistoryDuration)-9:]
+					}
+					duration := c.EndTime.Unix() - c.StartTime.Unix()
+					history.Actions[j].HistoryDuration = append(history.Actions[j].HistoryDuration, duration)
+					found = true
+					break
+				}
+			}
+			if !found {
+				duration := c.EndTime.Unix() - c.StartTime.Unix()
+				c.HistoryDuration = []int64{duration}
+				newActions = append(newActions, c)
+			}
+		}
+
+		history.Actions = append(history.Actions, newActions...)
+	}
+
+	sort.Sort(ByDuration(history.Actions))
+
+	// save to file
+	temp := filename + ".bak"
+	var data []byte
+	codec.EncJSON(history, &data)
+	err := ioutil.WriteFile(temp, data, os.ModePerm)
+	if err != nil {
+		blog.Infof("failed to save history data to %s with error:%v", temp, err)
+		return err
+	}
+	blog.Infof("succeed to save history data to %s ", temp)
+
+	// rm and rename
+	os.Remove(filename)
+	os.Rename(temp, filename)
+	blog.Infof("finished to rename %s to %s ", temp, filename)
+
+	return nil
 }
 
 func remove(s []string, i int) []string {
@@ -110,4 +200,25 @@ func replaceWithNextExclude(s string, old byte, new string, nextExcludes []byte)
 	}
 
 	return string(targetslice)
+}
+
+type ByDuration []common.Action
+
+func (fis ByDuration) Len() int {
+	return len(fis)
+}
+
+func (fis ByDuration) Swap(i, j int) {
+	fis[i], fis[j] = fis[j], fis[i]
+}
+
+// 按最后一次执行时间排序，执行时间长的放在前面
+func (fis ByDuration) Less(i, j int) bool {
+	leni := len(fis[i].HistoryDuration)
+	lenj := len(fis[j].HistoryDuration)
+	if leni > 0 && lenj > 0 {
+		return fis[i].HistoryDuration[leni-1] > fis[j].HistoryDuration[lenj-1]
+	}
+
+	return false
 }

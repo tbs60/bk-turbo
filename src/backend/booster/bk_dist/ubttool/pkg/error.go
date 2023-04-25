@@ -17,6 +17,8 @@ var (
 	ErrorInvalidWorkID            = fmt.Errorf("not found valid work id")
 	ErrorProjectSettingNotExisted = fmt.Errorf("not found project setting file")
 	ErrorUnknown                  = fmt.Errorf("unknown error")
+	ErrorHistoryDirNotExisted     = fmt.Errorf("history dir not existed")
+	ErrorHistoryFileNotExisted    = fmt.Errorf("history file not existed")
 )
 
 var errorCodeMap map[error]int
