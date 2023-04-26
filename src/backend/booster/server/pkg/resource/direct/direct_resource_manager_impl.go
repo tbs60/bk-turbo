@@ -309,24 +309,6 @@ func (d *directResourceManager) getFreeResource(
 	return res, nil
 }
 
-func (d *directResourceManager) addRes(resBatchID string, condition interface{}) ([]*AgentResourceExternal, error) {
-	// TODO : choose from allocated resource
-	res := []*AgentResourceExternal{}
-	blog.Infof("drm : kkk : condition[%s]", fmt.Sprintf("%v", condition))
-
-	d.resourceLock.RLock()
-	for ip, r := range d.resource {
-		if strings.Contains(fmt.Sprintf("%v", condition), r.Agent.Base.Cluster) {
-			if len(r.TaskList) < r.Agent.Base.TaskLimit {
-				blog.Infof("drm: add agent(%s) to serve task(%s)", ip, resBatchID)
-				res = append(res, r.Agent.FreeToExternal(r.TaskList))
-			}
-		}
-	}
-	d.resourceLock.RUnlock()
-	return res, nil
-}
-
 // getResourceInfo : 获取agent上报信息
 func (d *directResourceManager) getResourceInfo() ([]oneagentResource, error) {
 	var res []oneagentResource
@@ -780,7 +762,8 @@ func (d *directResourceManager) notifyAllAgentRelease(userID, resBatchID string)
 	d.resourceLock.RLock()
 	for ip, agent := range d.resource {
 		blog.Infof("drm: check for ip [%s],tasklist [%v]", ip, agent.TaskList)
-		if len(agent.Agent.Allocated) > 0 && len(agent.TaskList) <= 0 {
+		//if len(agent.Agent.Allocated) > 0 && len(agent.TaskList) == 0 {
+		if len(agent.TaskList) == 0 {
 			for _, v := range agent.Agent.Allocated {
 				if v.UserID == userID && v.ResBatchID == resBatchID {
 					for _, c := range v.Commands {
@@ -925,6 +908,9 @@ func (d *directResourceManager) getAllFreeResource(userID string) ([]*AgentResou
 	ress := []*AgentResourceExternal{}
 
 	for _, v := range d.resource {
+		if len(v.TaskList) >= v.Agent.Base.TaskLimit {
+			continue
+		}
 		// 需要确认下 free 里面的字段是否完整，如果不完整，需要补齐
 		externalagent := v.Agent.FreeToExternal(v.TaskList)
 		//if externalagent.Resource.CPU > 0 {

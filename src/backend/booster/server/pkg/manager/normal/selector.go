@@ -94,11 +94,17 @@ func (s *selector) detectNewQueue() {
 			continue
 		}
 
+		isExist := false
 		for _, q := range s.queueInfoList {
 			if q.QueueName == agent.Cluster {
-				continue
+				isExist = true
+				break
 			}
 		}
+		if isExist {
+			continue
+		}
+
 		blog.Infof("selector: ready to add new queue(%s)", agent.Cluster)
 		err := s.layer.AddStagingTaskQueue(egn.Name(), agent.Cluster)
 		if err != nil {

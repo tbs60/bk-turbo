@@ -188,6 +188,14 @@ func (o *processManager) ExecuteCommand(res *types.NotifyAgentData) error {
 		// o.delCommand(res.UserID, res.ResBatchID, res.ReferCmd, res.ReferID)
 		go o.checkAndDelcommand(res.UserDefineID, res.UserID, res.ResBatchID, res.ReferCmd, res.ReferID)
 
+		for i, r := range o.agent.Allocated {
+			if r.ResBatchID == r.ResBatchID {
+				o.agent.Allocated = append(o.agent.Allocated[:i], o.agent.Allocated[i+1:]...)
+				blog.Infof("agent allocated [%v] after release task (%s)", o.agent.Allocated, r.ResBatchID)
+				break
+			}
+		}
+
 		return nil
 	}
 
@@ -198,8 +206,8 @@ func (o *processManager) addCommand(userID, resBatchID string, cmd *types.Comman
 	blog.Infof("addCommand with [%s][%s][%+v]", userID, resBatchID, cmd)
 
 	// 执行命令时现在没有带资源信息，统一从 已分配的资源中获取，但现在没有实现 通知agent分配资源的接口，所以临时用独占的方式
-	//res := &o.agent.Total
-	res := cmd.ResourceUsed
+	res := &o.agent.Total
+	//res := cmd.ResourceUsed
 
 	blog.Infof("kkk used resource : [%v]", res)
 
@@ -209,7 +217,7 @@ func (o *processManager) addCommand(userID, resBatchID string, cmd *types.Comman
 		for _, v := range o.agent.Allocated {
 			if v.UserID == userID && v.ResBatchID == resBatchID {
 				existedAllocated = true
-				v.AllocatedResource.Add(&res)
+				v.AllocatedResource.Add(res)
 				v.Commands = append(v.Commands, cmd)
 				break
 			}
@@ -218,7 +226,7 @@ func (o *processManager) addCommand(userID, resBatchID string, cmd *types.Comman
 
 	if !existedAllocated {
 		o.agent.Allocated = append(o.agent.Allocated, &types.AllocatedInfo{
-			AllocatedResource: res,
+			AllocatedResource: *res,
 			UserID:            userID,
 			ResBatchID:        resBatchID,
 			Commands:          []*types.CommandInfo{cmd},
