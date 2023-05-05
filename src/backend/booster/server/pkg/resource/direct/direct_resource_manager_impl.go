@@ -511,6 +511,22 @@ func (d *directResourceManager) executeCommand(userID string, ip string, resBatc
 		return nil
 	}
 
+	/*if cmd.CmdType == CmdRelease {
+		for agentIP, agent := range d.resource {
+			if agentIP != ip {
+				continue
+			}
+
+			if len(agent.TaskList) > 0 {
+				blog.Infof("drm: agent(%s) release cancled for it's still serving (%d)tasks(%v)",
+					ip, len(agent.TaskList), agent.TaskList)
+				return nil
+			}
+			blog.Infof("drm: ready to release resource of agent(%s)", ip)
+			break
+		}
+	}*/
+
 	port, err := d.getAgentPort(ip, resBatchID)
 	if err != nil {
 		return err
@@ -762,9 +778,10 @@ func (d *directResourceManager) notifyAllAgentRelease(userID, resBatchID string)
 	d.resourceLock.RLock()
 	for ip, agent := range d.resource {
 		blog.Infof("drm: check for ip [%s],tasklist [%v]", ip, agent.TaskList)
-		//if len(agent.Agent.Allocated) > 0 && len(agent.TaskList) == 0 {
-		if len(agent.TaskList) == 0 {
+		if len(agent.Agent.Allocated) > 0 {
+			//if len(agent.TaskList) == 0 {
 			for _, v := range agent.Agent.Allocated {
+				blog.Infof("kkk: (%s): ", ip, v.UserID, v.ResBatchID, userID, resBatchID)
 				if v.UserID == userID && v.ResBatchID == resBatchID {
 					for _, c := range v.Commands {
 						d.notifyAgentRelease(userID, resBatchID, ip, c.Cmd, c.ID, agent.Agent.getGOOS())
@@ -912,7 +929,7 @@ func (d *directResourceManager) getAllFreeResource(userID string) ([]*AgentResou
 			continue
 		}
 		// 需要确认下 free 里面的字段是否完整，如果不完整，需要补齐
-		externalagent := v.Agent.FreeToExternal(v.TaskList)
+		externalagent := v.Agent.FreeToExternal(v.TaskList, v.WorkerReady)
 		//if externalagent.Resource.CPU > 0 {
 		ress = append(ress, externalagent)
 		//}

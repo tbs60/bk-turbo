@@ -54,6 +54,9 @@ type WebsocketHandler struct {
 
 	usage []string
 	mgr   processManager.Manager
+
+	resetLock     sync.RWMutex
+	needResetConn bool
 }
 
 // WebsocketHandler : return new websocket handle
@@ -61,6 +64,7 @@ func NewWebsocketHandler(conf *config.ServerConfig) (*WebsocketHandler, error) {
 	h := &WebsocketHandler{
 		conf:          conf,
 		ConnectionMap: make(map[string]*net.Conn),
+		needResetConn: false,
 	}
 
 	err := h.init()
@@ -108,6 +112,10 @@ func (h *WebsocketHandler) initConnection() error {
 		h.connLock.Unlock()
 	}
 
+	h.resetLock.Lock()
+	defer h.resetLock.Unlock()
+
+	h.needResetConn = false
 	fmt.Printf("server connected")
 	return nil
 }
@@ -146,24 +154,16 @@ func (h *WebsocketHandler) Start() error {
 		}
 
 	}
-
-	return nil
 }
 
 func (h *WebsocketHandler) connCheck(ctx context.Context) {
 	blog.Infof("start checking conn")
 
-	needReconnect := false
-	for usage, conn := range h.ConnectionMap {
-		// check if conn is closed
-		if err := (*conn).SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
-			blog.Errorf("% connection closed: %s, ready to reconnect", usage, err)
-			needReconnect = true
-			break
-		}
-	}
+	h.resetLock.Lock()
+	needReset := h.needResetConn
+	h.resetLock.Unlock()
 
-	if needReconnect {
+	if needReset {
 		blog.Infof("ready to reconnect server")
 		h.initConnection()
 	}
@@ -259,6 +259,9 @@ func (h *WebsocketHandler) listenExecuteCommand(ctx context.Context, usage strin
 
 			if op == ws.OpClose || err == io.EOF {
 				blog.Errorf("execute handler: conn between (%s) is closed", (*conn).RemoteAddr().(*net.TCPAddr).IP)
+				h.resetLock.Lock()
+				h.needResetConn = true
+				h.resetLock.Unlock()
 				return
 			}
 			if op == ws.OpContinuation {

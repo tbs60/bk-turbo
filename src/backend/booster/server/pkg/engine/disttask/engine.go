@@ -781,13 +781,18 @@ func (de *disttaskEngine) launchDirectDone(task *distTask) (bool, error) {
 	for _, r := range resourceList {
 		for i := range workerList {
 			if r.Base.IP == workerList[i].IP {
-				workerList[i].CPU = r.Resource.CPU
-				workerList[i].Mem = r.Resource.Mem
+				//workerList[i].CPU = r.Resource.CPU
+				//workerList[i].Mem = r.Resource.Mem
+
+				workerList[i].CPU = r.Total.CPU
+				workerList[i].Mem = r.Total.Mem
 				break
 			}
 		}
-		cpuTotal += r.Resource.CPU
-		memTotal += r.Resource.Mem
+		//cpuTotal += r.Resource.CPU
+		//memTotal += r.Resource.Mem
+		cpuTotal += r.Total.CPU
+		memTotal += r.Total.Mem
 	}
 
 	task.Workers = workerList
@@ -942,6 +947,12 @@ func (de *disttaskEngine) releaseDirectTask(task *distTask) error {
 	}
 
 	for _, r := range resources {
+		if len(r.TaskList) > 1 {
+			blog.Infof("engine(%s) agent(%s) is still serving (%d) tasks(%v), not released",
+				EngineName, r.Base.IP, len(r.TaskList), r.TaskList)
+			continue
+		}
+
 		_ = de.directMgr.ExecuteCommand(r.Base.IP, task.ID, &respack.Command{
 			Cmd:          getDirectReleaseCommand(task.InheritSetting.QueueName),
 			CmdType:      respack.CmdRelease,
@@ -1435,11 +1446,13 @@ func resourceSelector(
 		if agent.Resource.CPU <= 0 {
 			blog.Infof("engine(%s) select the (%d)th agent(%s) with tasklist len(%d), queue",
 				EngineName, i, agent.Base.IP, len(agent.TaskList))
-			//continue
-		}
 
-		cpuTotal += agent.Resource.CPU
-		r = append(r, agent)
+			cpuTotal += agent.Total.CPU
+			r = append(r, agent)
+		} else {
+			cpuTotal += agent.Resource.CPU
+			r = append(r, agent)
+		}
 
 		blog.Infof("engine(%s) select free agent(%s:%.2f) with cluster(%s), current(%.2f), target(%.2f~%.2f)",
 			EngineName, agent.Base.IP, agent.Resource.CPU, agent.Base.Cluster, cpuTotal, c.leastCPU, c.maxCPU)

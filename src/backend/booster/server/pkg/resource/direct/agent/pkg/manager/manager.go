@@ -850,7 +850,7 @@ func (o *processManager) detectWorker() bool {
 }
 
 func (o *processManager) detectWinWorker() bool {
-	output, err := execCmd("tasklist")
+	output, err := execCmd("tasklist |findstr bk-")
 	if err != nil {
 		blog.Errorf("detect worker failed: %v", err)
 		return false

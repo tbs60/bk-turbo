@@ -156,17 +156,21 @@ var commandStatusTypeMap = map[CommandStatusType]string{
 
 // AgentResourceExternal : agent info
 type AgentResourceExternal struct {
-	Base     AgentBase `json:"base"`
-	Resource Resource  `json:"free"`
-	TaskList []string  `json:"task_list"`
+	Base        AgentBase `json:"base"`
+	Resource    Resource  `json:"free"`
+	TaskList    []string  `json:"task_list"`
+	Total       Resource  `json:"total"`
+	WorkerReady bool      `json:"worker_ready"`
 }
 
 // FreeToExternal format free resource to AgentResourceExternal
-func (a *AgentInfo) FreeToExternal(tl []string) *AgentResourceExternal {
+func (a *AgentInfo) FreeToExternal(tl []string, isWorkerReady bool) *AgentResourceExternal {
 	return &AgentResourceExternal{
-		Base:     a.Base,
-		Resource: a.Free,
-		TaskList: tl,
+		Base:        a.Base,
+		Resource:    a.Free,
+		TaskList:    tl,
+		Total:       a.Total,
+		WorkerReady: isWorkerReady,
 	}
 }
 
