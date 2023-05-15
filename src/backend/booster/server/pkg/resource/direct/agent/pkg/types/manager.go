@@ -138,6 +138,7 @@ type AgentBase struct {
 	Labels    map[string]string `json:"labels"`
 	User      string            `json:"user"`
 	TaskLimit int               `json:"task_limit"`
+	WorkDir   string            `json:"work_dir"`
 }
 
 // AgentInfo : agent info

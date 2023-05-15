@@ -102,7 +102,7 @@ func (h *WebsocketHandler) initConnection() error {
 		url := TestBaseUrl + usage
 		conn, _, _, err := ws.Dial(context.Background(), url)
 		if err != nil {
-			blog.Errorf("failed to create execute connection with error:(%v)", err)
+			blog.Errorf("failed to create %s connection with error:(%v)", usage, err)
 			return err
 		}
 		fmt.Printf("%s connection complete", usage)

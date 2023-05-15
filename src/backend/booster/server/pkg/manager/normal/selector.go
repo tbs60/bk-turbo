@@ -208,9 +208,10 @@ func (s *selector) pick(egn engine.Engine, tqg *engine.TaskQueueGroup, queueName
 	if err = egn.LaunchTask(tb, queueName); err != nil {
 		if err != engine.ErrorNoEnoughResources {
 			blog.Errorf("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), queueName, err)
+			return
 		}
-		blog.Errorf("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), queueName, err)
 
+		blog.Errorf("selector: launch task(%s) from engine(%s) queue(%s) failed: %v", tb.ID, egn.Name(), queueName, err)
 		nextQueue := tb.Client.GetQueueListNext()
 		if nextQueue != "" {
 			tb.Client.QueueName = nextQueue

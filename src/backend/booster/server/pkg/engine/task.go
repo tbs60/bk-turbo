@@ -10,7 +10,6 @@
 package engine
 
 import (
-	"strings"
 	"time"
 
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
@@ -45,7 +44,7 @@ const (
 	TaskStatusFailed   TaskStatusType = "failed"
 	TaskStatusFinish   TaskStatusType = "finish"
 
-	TaskqueueListSymbol = "\\"
+	TaskqueueListSymbol = "|"
 )
 
 // Terminated check if the task status is in terminated
@@ -181,7 +180,7 @@ func CopyTaskBasic(task *TaskBasic) *TaskBasic {
 type TaskBasicClient struct {
 	EngineName    TypeName
 	QueueName     string
-	QueueList     string
+	QueueList     []string
 	ProjectID     string
 	BuildID       string
 	Priority      TaskPriority
@@ -349,30 +348,33 @@ func now() time.Time {
 }
 
 func (tbc *TaskBasicClient) GetQueueListFirst() string {
-	index := strings.Index(tbc.QueueList, TaskqueueListSymbol)
-	if index == -1 {
-		return tbc.QueueList
+	if len(tbc.QueueList) == 0 {
+		return ""
 	}
-	return tbc.QueueList[:index]
+
+	return tbc.QueueList[0]
 }
 
 func (tbc *TaskBasicClient) GetQueueListNext() string {
 	currentQueue := tbc.QueueName
-	index := strings.Index(tbc.QueueList, currentQueue)
-	if index == -1 {
-		return ""
-	}
 
-	left := strings.TrimPrefix(tbc.QueueList[index+len(currentQueue):], TaskqueueListSymbol)
+	for i, q := range tbc.QueueList {
+		if q != currentQueue {
+			continue
+		}
+		if i == len(tbc.QueueList)-1 {
+			return ""
+		}
 
-	index1 := strings.Index(left, TaskqueueListSymbol)
-	if index1 == -1 {
-		return left
+		next := tbc.QueueList[i+1]
+		if next == currentQueue {
+			return ""
+		}
+		return next
 	}
+	return ""
+}
 
-	next := left[:index1]
-	if next == currentQueue {
-		return ""
-	}
-	return next
+func (tbc *TaskBasicClient) IsPublicQueueEnable() bool {
+	return len(tbc.QueueList) == 1
 }

@@ -352,7 +352,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 			EngineName: pb.EngineName,
 			// init QueueName later
 			// QueueName: pb.QueueName,
-			QueueList:     pb.QueueName,
+			QueueList:     strings.Split(pb.QueueName, engine.TaskqueueListSymbol),
 			Priority:      pb.Priority,
 			StageTimeout:  pb.StageTimeout,
 			ProjectID:     param.ProjectID,
@@ -377,6 +377,7 @@ func (m *manager) createTask(param *mgr.TaskCreateParam) (*engine.TaskBasic, err
 	}
 
 	tb.Client.QueueName = tb.Client.GetQueueListFirst()
+
 	if err = tb.Check(); err != nil {
 		blog.Errorf("manager: create task basic(%s) check failed: %v", taskID, err)
 		return nil, err

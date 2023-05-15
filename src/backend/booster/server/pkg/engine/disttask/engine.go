@@ -63,6 +63,9 @@ const (
 	workerMacPath = "/Users/bcss/bk-dist-worker"
 	workerWinPath = "C:\\data\\bcss\\bk-dist-worker"
 
+	relativeWorkerMacPath = "../bk-dist-worker"
+	relativeWorkerWinPath = "..\\bk-dist-worker"
+
 	workerDirectImageEnvSep = ";"
 
 	workerDirectServicePort = 31000
@@ -547,7 +550,7 @@ func (de *disttaskEngine) launchDirectTask(task *distTask, tb *engine.TaskBasic,
 		}
 
 		if publicQueue := de.getPublicQueueByQueueName(queueName); publicQueue != nil &&
-			de.canGiveToPublicQueue(queueName) {
+			de.canGiveToPublicQueue(queueName, tb) {
 			publicQueue.Add(tb)
 			blog.Infof("queue (%s) has no enough resource, put task(%s) in public queue", queueName, tb.ID)
 		}
@@ -594,8 +597,8 @@ func (de *disttaskEngine) launchDirectTask(task *distTask, tb *engine.TaskBasic,
 			CmdType:      respack.CmdLaunch,
 			Env:          e,
 			UserDefineID: task.ID,
-			Dir:          getDirectPath(task.InheritSetting.QueueName),
-			Path:         getDirectPath(task.InheritSetting.QueueName),
+			Dir:          getDirectPath(queueName, r.Base.WorkDir),
+			Path:         getDirectPath(queueName, r.Base.WorkDir),
 			ResourceUsed: respack.Resource{
 				CPU:  r.Resource.CPU,
 				Mem:  r.Resource.Mem,
@@ -685,7 +688,7 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 		}
 
 		if publicQueue := de.getPublicQueueByQueueName(queueName); publicQueue != nil &&
-			de.canGiveToPublicQueue(queueName) {
+			de.canGiveToPublicQueue(queueName, tb) {
 			publicQueue.Add(tb)
 			blog.Infof("queue (%s) has no enough resource, put task(%s) in public queue", queueName, tb.ID)
 		}
@@ -947,6 +950,10 @@ func (de *disttaskEngine) releaseDirectTask(task *distTask) error {
 	}
 
 	for _, r := range resources {
+		// todokkk: 记录tasklist 插入和删除的时间
+		// todokkk: worker相对路径命令
+		// todokkk: 支持agent worker放在非c盘 ✅
+		// todokkk queue list ✅
 		if len(r.TaskList) > 1 {
 			blog.Infof("engine(%s) agent(%s) is still serving (%d) tasks(%v), not released",
 				EngineName, r.Base.IP, len(r.TaskList), r.TaskList)
@@ -957,8 +964,8 @@ func (de *disttaskEngine) releaseDirectTask(task *distTask) error {
 			Cmd:          getDirectReleaseCommand(task.InheritSetting.QueueName),
 			CmdType:      respack.CmdRelease,
 			UserDefineID: task.ID,
-			Dir:          getDirectPath(task.InheritSetting.QueueName),
-			Path:         getDirectPath(task.InheritSetting.QueueName),
+			Dir:          getDirectPath(task.InheritSetting.QueueName, r.Base.WorkDir),
+			Path:         getDirectPath(task.InheritSetting.QueueName, r.Base.WorkDir),
 		})
 	}
 
@@ -1100,7 +1107,11 @@ func (de *disttaskEngine) canTakeFromPublicQueue(queueName string) bool {
 	}
 }
 
-func (de *disttaskEngine) canGiveToPublicQueue(queueName string) bool {
+func (de *disttaskEngine) canGiveToPublicQueue(queueName string, tb *engine.TaskBasic) bool {
+	if tb.Client.IsPublicQueueEnable() == false {
+		return false
+	}
+
 	if de.conf.QueueShareType == nil {
 		return true
 	}
@@ -1277,10 +1288,6 @@ func (de *disttaskEngine) getPublicQueueByQueueName(queueName string) engine.Sta
 		key = publicQueueK8SDefault
 	case queueNameHeaderK8SWin:
 		key = publicQueueK8SWindows
-	case queueNameHeaderDirectMac:
-		key = publicQueueDirectMac
-	case queueNameHeaderDirectWin:
-		key = publicQueueK8SWindows
 	default:
 		return nil
 	}
@@ -1355,12 +1362,18 @@ func getDirectReleaseCommand(queueName string) string {
 	}
 }
 
-func getDirectPath(queueName string) string {
+func getDirectPath(queueName string, agentDir string) string {
 	switch getQueueNameHeader(queueName) {
 	case queueNameHeaderDirectWin:
-		return workerWinPath
+		if agentDir == "" {
+			return workerWinPath
+		}
+		return agentDir + relativeWorkerWinPath
 	case queueNameHeaderDirectMac:
-		return workerMacPath
+		if agentDir == "" {
+			return workerMacPath
+		}
+		return agentDir + relativeWorkerMacPath
 	default:
 		return ""
 	}

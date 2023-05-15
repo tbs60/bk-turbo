@@ -400,6 +400,7 @@ func (d *directResourceManager) updateTaskList(resBathchID string, res *AgentRes
 			continue
 		}
 		r.TaskList = append(r.TaskList, resBathchID)
+		res.TaskList = append(res.TaskList, resBathchID)
 		break
 	}
 	return nil
@@ -442,12 +443,11 @@ func (d *directResourceManager) setResourceAllocated(
 
 	allocatedRess := []*allocatedResource{}
 	for _, r := range res {
+		d.updateTaskList(resBatchID, r)
 		allocatedRess = append(allocatedRess, &allocatedResource{
 			resource:      r,
 			allocatedTime: time.Now().Unix(),
 		})
-
-		d.updateTaskList(resBatchID, r)
 	}
 
 	v := d.getUserAllocated(userID)
@@ -511,22 +511,6 @@ func (d *directResourceManager) executeCommand(userID string, ip string, resBatc
 		return nil
 	}
 
-	/*if cmd.CmdType == CmdRelease {
-		for agentIP, agent := range d.resource {
-			if agentIP != ip {
-				continue
-			}
-
-			if len(agent.TaskList) > 0 {
-				blog.Infof("drm: agent(%s) release cancled for it's still serving (%d)tasks(%v)",
-					ip, len(agent.TaskList), agent.TaskList)
-				return nil
-			}
-			blog.Infof("drm: ready to release resource of agent(%s)", ip)
-			break
-		}
-	}*/
-
 	port, err := d.getAgentPort(ip, resBatchID)
 	if err != nil {
 		return err
@@ -542,11 +526,7 @@ func (d *directResourceManager) executeCommand(userID string, ip string, resBatc
 	}
 
 	blog.Infof("drm: executeCommand: try to request %s json: [%s]", uri, jsonData)
-	/* kkk
-	if _, _, err = d.post(uri, nil, []byte(jsonData)); err != nil {
-		blog.Errorf("drm: executeCommand[%+v] failed: %v", cmd, err)
-		return err
-	}*/
+
 	cp, err := d.connPools.getConnPool(localCommon.ExecuteCommand)
 	if err != nil {
 		blog.Errorf("drm: executeCommand[%+v] get conn failed: %v", cmd, err)
@@ -558,6 +538,10 @@ func (d *directResourceManager) executeCommand(userID string, ip string, resBatc
 		return err
 	}
 	err = wsutil.WriteServerMessage(*conn, ws.OpText, []byte(jsonData))
+	if err != nil {
+		blog.Errorf("drm: executeCommand[%+v] failed with err: %v", err)
+		return err
+	}
 
 	blog.Infof("drm: executeCommand: success to request %s json: [%s]", uri, jsonData)
 	return nil

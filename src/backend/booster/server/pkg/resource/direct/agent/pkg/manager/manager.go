@@ -712,6 +712,12 @@ func (o *processManager) initBaseInfo() error {
 		o.agent.Base.User = u.Username
 	}
 
+	dir, err := os.Getwd()
+	if err != nil {
+		blog.Infof("initBaseInfo: get current directory failed: %v", err)
+	}
+	o.agent.Base.WorkDir = dir
+
 	return nil
 }
 
@@ -809,7 +815,6 @@ func (o *processManager) reportResourcekkk(conn *net.Conn) error {
 
 	err := wsutil.WriteClientMessage(*conn, ws.OpText, data)
 	if err != nil {
-
 		blog.Errorf("ReportResource write failed : %v", err)
 		return err
 	}
@@ -850,7 +855,7 @@ func (o *processManager) detectWorker() bool {
 }
 
 func (o *processManager) detectWinWorker() bool {
-	output, err := execCmd("tasklist |findstr bk-")
+	output, err := execCmd("tasklist")
 	if err != nil {
 		blog.Errorf("detect worker failed: %v", err)
 		return false

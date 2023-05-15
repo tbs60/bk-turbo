@@ -453,13 +453,13 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 			m.work.ID(), req.Pid, len(req.BanWorkerList))
 		return nil, errors.New("no available worker")
 	}
-	blog.Infof("remote: selected host(%s) with large file(%s)",
-		req.Server.Server, fpath)
+	blog.Infof("remote: selected host(%s) with large file(%s)", req.Server.Server, fpath)
 
 	if m.work.Resource().IfResourceDirect() {
 		handler := m.remoteWorker.Handler(0, nil, nil, nil)
+		// todokkk: worker拒绝原因
 		if ok, _ := handler.EnsureWorkerOK(req.Server.Server); !ok {
-			blog.Infof("remote: ensure server(%s) is not ok, maybe worker is busy", req.Server.Server)
+			blog.Infof("remote: ensure worker(%s) is not ok, maybe worker is busy", req.Server.Server)
 			go m.handleWorkerBusy(req.Server)
 			return nil, types.ErrWorkerBusy
 		}
@@ -1831,5 +1831,6 @@ func (m *Mgr) handleWorkerBusy(host *dcProtocol.Host) {
 			time.Sleep(5 * time.Second)
 			m.resource.recoverDeadWorker(w)
 		}
+		break
 	}
 }
