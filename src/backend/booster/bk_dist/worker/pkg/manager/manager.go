@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/config"
 	pbcmd "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/cmd_handler"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/protocol"
+	workerTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 	commonUtil "github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/util"
 	"github.com/shirou/gopsutil/cpu"
@@ -351,11 +352,14 @@ func (o *tcpManager) dealEnsureWorker(client *protocol.TCPClient, head *dcProtoc
 	}
 
 	o.bufflock.RLock()
-	isok := len(o.buffedcmds) < o.maxjobs
+	ensureRsp := workerTypes.EnsureWorkerOK
+	if len(o.buffedcmds) > o.maxjobs {
+		ensureRsp = workerTypes.EnsureWorkerBusy
+	}
 	blog.Infof("kkk buffer len(%d) , max (%d)", len(o.buffedcmds), o.maxjobs)
 	o.bufflock.RUnlock()
 
-	return handler.Handle(client, head, nil, time.Now(), "", nil, isok)
+	return handler.Handle(client, head, nil, time.Now(), "", nil, ensureRsp)
 }
 
 func (o *tcpManager) dealRemoteTaskCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
@@ -417,7 +421,7 @@ func (o *tcpManager) dealSyncTimeCmd(client *protocol.TCPClient, head *dcProtoco
 		return err
 	}
 
-	return handler.Handle(client, head, nil, time.Now(), "", nil, true)
+	return handler.Handle(client, head, nil, time.Now(), "", nil, "")
 }
 
 func (o *tcpManager) dealUnknownCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
@@ -431,7 +435,7 @@ func (o *tcpManager) dealUnknownCmd(client *protocol.TCPClient, head *dcProtocol
 
 	_, _ = handler.ReceiveBody(client, head, "", nil)
 
-	return handler.Handle(client, head, nil, time.Now(), "", nil, true)
+	return handler.Handle(client, head, nil, time.Now(), "", nil, "")
 }
 
 func (o *tcpManager) dealSendFileCmd(client *protocol.TCPClient, head *dcProtocol.PBHead) error {
@@ -468,7 +472,7 @@ func (o *tcpManager) dealSendFileCmd(client *protocol.TCPClient, head *dcProtoco
 	}()
 
 	//
-	err = handler.Handle(client, head, body, time.Now(), basedir, nil, true)
+	err = handler.Handle(client, head, body, time.Now(), basedir, nil, "")
 	return err
 }
 
@@ -504,7 +508,7 @@ func (o *tcpManager) dealCheckCacheCmd(client *protocol.TCPClient, head *dcProto
 	}()
 
 	//
-	err = handler.Handle(client, head, body, time.Now(), "", nil, true)
+	err = handler.Handle(client, head, body, time.Now(), "", nil, "")
 	return err
 }
 
@@ -578,7 +582,7 @@ func (o *tcpManager) dealBufferedCmd(cmd *buffedcmd) error {
 
 	_ = os.MkdirAll(cmd.basedir, os.ModePerm)
 	err := cmd.handler.Handle(cmd.client, cmd.head, cmd.body, cmd.receivedtime,
-		cmd.basedir, o.conf.CmdReplaceRules, true)
+		cmd.basedir, o.conf.CmdReplaceRules, "")
 
 	// nextcmd := o.popcmd()
 	// if nextcmd != nil {

@@ -29,7 +29,7 @@ type Handler interface {
 		receivedtime time.Time,
 		basedir string,
 		cmdreplacerules []dcConfig.CmdReplaceRule,
-		ensureOK bool) error
+		ensureRsp string) error
 }
 
 var handlemap map[dcProtocol.PBCmdType]Handler

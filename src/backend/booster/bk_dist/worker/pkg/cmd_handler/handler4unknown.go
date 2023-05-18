@@ -46,7 +46,7 @@ func (h *Handle4Unknown) Handle(client *protocol.TCPClient,
 	receivedtime time.Time,
 	basedir string,
 	cmdreplacerules []dcConfig.CmdReplaceRule,
-	isok bool) error {
+	ensureRsp string) error {
 
 	go h.handle(client, receivedtime)
 	return nil

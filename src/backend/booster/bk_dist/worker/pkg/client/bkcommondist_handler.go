@@ -18,6 +18,7 @@ import (
 	dcProtocol "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/protocol"
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/syscall"
+	workerTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
@@ -106,11 +107,11 @@ func (r *CommonRemoteHandler) ExecuteSyncTime(server string) (int64, error) {
 }
 
 // EnsureWorkerOK ensure P2P worker is OK before execute task
-func (r *CommonRemoteHandler) EnsureWorkerOK(server string) (bool, error) {
+func (r *CommonRemoteHandler) EnsureWorkerOK(server string) (string, error) {
 	client := NewTCPClient(r.ioTimeout)
 	if err := client.Connect(server); err != nil {
 		blog.Warnf("error: %v", err)
-		return true, err
+		return workerTypes.EnsureWorkerOK, err
 	}
 	defer func() {
 		_ = client.Close()
@@ -119,22 +120,22 @@ func (r *CommonRemoteHandler) EnsureWorkerOK(server string) (bool, error) {
 	messages, err := encodeEnsureWorkerReq()
 	if err != nil {
 		blog.Warnf("error: %v", err)
-		return true, err
+		return workerTypes.EnsureWorkerOK, err
 	}
 
 	err = sendMessages(client, messages)
 	if err != nil {
 		blog.Warnf("error: %v", err)
-		return true, err
+		return workerTypes.EnsureWorkerOK, err
 	}
 
 	rsp, err := receiveEnsureWorkerRsp(client)
 	if err != nil {
 		blog.Warnf("error: %v", err)
-		return true, err
+		return workerTypes.EnsureWorkerOK, err
 	}
 
-	return *rsp.Ifok, nil
+	return *rsp.RspCode, nil
 }
 
 // ExecuteTask do execution in remote and get back the result(and files)

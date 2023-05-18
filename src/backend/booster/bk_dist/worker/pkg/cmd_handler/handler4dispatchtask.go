@@ -89,7 +89,7 @@ func (h *Handle4DispatchReq) Handle(client *protocol.TCPClient,
 	receivedtime time.Time,
 	basedir string,
 	cmdreplacerules []dcConfig.CmdReplaceRule,
-	isok bool) error {
+	ensureRsp string) error {
 	blog.Infof("handle with base dir:%s", basedir)
 	defer func() {
 		blog.Infof("handle out for base dir:%s", basedir)

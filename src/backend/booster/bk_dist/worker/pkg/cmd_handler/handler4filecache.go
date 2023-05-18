@@ -85,7 +85,7 @@ func (h *Handle4FileCache) Handle(client *protocol.TCPClient,
 	receivedtime time.Time,
 	_ string,
 	_ []dcConfig.CmdReplaceRule,
-	isok bool) error {
+	ensureRsp string) error {
 	blog.Infof("file cache: handle file check cache")
 	// convert to req
 	req, ok := body.(*dcProtocol.PBBodyCheckCacheReq)

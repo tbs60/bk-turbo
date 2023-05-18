@@ -13,3 +13,10 @@ package types
 const (
 	FileConnectFlag = "<!|!>"
 )
+
+const (
+	// EnsureWorkerRsp
+	EnsureWorkerOK      = "worker is ok"
+	EnsureWorkerBusy    = "worker refuse for busy"
+	EnsureWorkerUnknown = "worker refuse for unknown reason"
+)

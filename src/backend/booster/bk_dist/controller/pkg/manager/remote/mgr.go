@@ -25,6 +25,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/config"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/controller/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/client"
+	workerTypes "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/worker/pkg/types"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/blog"
 )
 
@@ -457,11 +458,13 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 
 	if m.work.Resource().IfResourceDirect() {
 		handler := m.remoteWorker.Handler(0, nil, nil, nil)
-		// todokkk: worker拒绝原因
-		if ok, _ := handler.EnsureWorkerOK(req.Server.Server); !ok {
-			blog.Infof("remote: ensure worker(%s) is not ok, maybe worker is busy", req.Server.Server)
-			go m.handleWorkerBusy(req.Server)
-			return nil, types.ErrWorkerBusy
+		if rsp, _ := handler.EnsureWorkerOK(req.Server.Server); rsp != workerTypes.EnsureWorkerOK {
+			blog.Infof("remote: ensure worker(%s) is not ok for: %s", req.Server.Server, rsp)
+			if rsp == workerTypes.EnsureWorkerBusy {
+				go m.handleWorkerBusy(req.Server)
+				return nil, types.ErrWorkerBusy
+			}
+			return nil, errors.New(rsp)
 		}
 	}
 

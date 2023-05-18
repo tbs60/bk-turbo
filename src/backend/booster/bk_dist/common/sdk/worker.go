@@ -24,7 +24,7 @@ type RemoteWorkerHandler interface {
 	ExecuteTaskWithoutSaveFile(server *dcProtocol.Host, req *BKDistCommand) (*BKDistResult, error)
 	ExecuteSendFile(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox) (*BKSendFileResult, error)
 	ExecuteCheckCache(server *dcProtocol.Host, req *BKDistFileSender, sandbox *syscall.Sandbox) ([]bool, error)
-	EnsureWorkerOK(server string) (bool, error)
+	EnsureWorkerOK(server string) (string, error)
 }
 
 // FileDescPriority from 0 ~ 100, from high to low

@@ -116,6 +116,7 @@ message PBBodySyncTimeRsp {
 
 message PBBodyEnsureWorkerRsp {
 	required bool ifok = 1;
+	required string rspCode =2;
 }
 
 message PBBodySendFileReq {

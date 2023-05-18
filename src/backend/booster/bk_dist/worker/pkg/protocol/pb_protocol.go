@@ -667,12 +667,15 @@ func EncodeBKSyncTimeRsp(receivedtime time.Time) ([]protocol.Message, error) {
 }
 
 // EncodeEnsureWorkerReq encode worker status to message
-func EncodeEnsureWorkerReq(isok bool) ([]protocol.Message, error) {
+func EncodeEnsureWorkerReq(ensureRsp string) ([]protocol.Message, error) {
 	blog.Debugf("encode synctime request to message now")
 
 	// encode body and file to message
+	ok := ensureRsp == types.EnsureWorkerOK
+	rsp := ensureRsp
 	pbbody := protocol.PBBodyEnsureWorkerRsp{
-		Ifok: &isok,
+		Ifok:    &ok,
+		RspCode: &rsp,
 	}
 
 	bodydata, err := proto.Marshal(&pbbody)
