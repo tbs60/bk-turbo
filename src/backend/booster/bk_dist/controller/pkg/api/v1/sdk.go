@@ -663,6 +663,7 @@ func (ws *workSDK) setSettings(settings *dcSDK.ControllerWorkSettings) error {
 		FilterRules:     settings.FilterRules,
 		Degraded:        settings.Degraded,
 		GlobalSlots:     settings.GlobalSlots,
+		RelativeMode:    settings.RelativeMode,
 	}, &data)
 
 	_, _, err := ws.sdk.request("POST", fmt.Sprintf(settingsURI, ws.id), data, false)

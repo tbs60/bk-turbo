@@ -84,6 +84,7 @@ type WorkSettingsParam struct {
 	FilterRules     []dcSDK.FilterRuleItem `json:"filter_rules"`
 	Degraded        bool                   `json:"degraded"`
 	GlobalSlots     bool                   `json:"global_slots"`
+	RelativeMode    bool                   `json:"relative_mode"`
 }
 
 // WorkSettingsResp describe the response of updating work settings to controller

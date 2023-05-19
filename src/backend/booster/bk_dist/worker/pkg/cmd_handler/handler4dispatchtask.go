@@ -52,7 +52,11 @@ func FilepathMapping(inputfile string, basedir string, relativedir string) (stri
 	}
 
 	if relativedir != "" {
-		outputfile = filepath.Join(relativedir, filepath.Base(inputfile))
+		if strings.HasSuffix(relativedir, filepath.Base(inputfile)) {
+			outputfile = relativedir
+		} else {
+			outputfile = filepath.Join(relativedir, filepath.Base(inputfile))
+		}
 	} else {
 		outputfile = filepath.Join(basedir, filepath.Base(inputfile))
 		outputrelativepath = basedir

@@ -67,6 +67,7 @@ type BoosterWorks struct {
 	MaxLocalPostJobs  int
 	SupportDirectives bool
 	GlobalSlots       bool
+	RelativeMode      bool
 
 	ExecutorLogLevel string
 

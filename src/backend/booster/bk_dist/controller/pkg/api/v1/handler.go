@@ -617,6 +617,7 @@ func getWorkSettingsConfig(req *restful.Request) (*types.WorkSettings, error) {
 		FilterRules:     param.FilterRules,
 		Degraded:        param.Degraded,
 		GlobalSlots:     param.GlobalSlots,
+		RelativeMode:    param.RelativeMode,
 	}
 	blog.Debugf("api: work settings config: %+v", config)
 	return config, nil

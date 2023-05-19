@@ -889,6 +889,7 @@ func (b *Booster) setSettings() error {
 		FilterRules:     rules,
 		Degraded:        b.config.Works.Degraded,
 		GlobalSlots:     b.config.Works.GlobalSlots,
+		RelativeMode:    b.config.Works.RelativeMode,
 	}
 	if err := b.work.SetSettings(b.workSettings); err != nil {
 		blog.Errorf("booster: task(%s) set settings to work(%s) in controller failed: %v",

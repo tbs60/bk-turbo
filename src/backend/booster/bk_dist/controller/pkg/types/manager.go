@@ -48,6 +48,7 @@ type WorkSettings struct {
 	FilterRules     dcSDK.FilterRules
 	Degraded        bool
 	GlobalSlots     bool
+	RelativeMode    bool
 }
 
 // Dump encode work settings to json bytes

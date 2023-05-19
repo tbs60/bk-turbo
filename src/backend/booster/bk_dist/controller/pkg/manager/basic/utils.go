@@ -135,12 +135,16 @@ func diffToolChainFiles(oldfs, newfs *[]dcSDK.FileDesc) (bool, string, error) {
 	return same, diffdesc, nil
 }
 
-func replaceTaskID(uniqid string, toolchain *types.ToolChain) error {
+func replaceTaskID(uniqid string, toolchain *types.ToolChain, relativeMode bool) error {
 	blog.Debugf("basic: try to render tool chain with ID: %s, toolchain:%+v", uniqid, *toolchain)
-
+	blog.Infof("basic: kkk try to render tool chain with ID: %s, toolchain:%+v", uniqid, *toolchain)
 	if strings.Contains(toolchain.ToolRemoteRelativePath, toolchainTaskIDKey) {
 		toolchain.ToolRemoteRelativePath = strings.Replace(
 			toolchain.ToolRemoteRelativePath, toolchainTaskIDKey, uniqid, -1)
+	}
+
+	if relativeMode {
+		toolchain.ToolRemoteRelativePath = GetRelativeToolchainPath(toolchain.ToolLocalFullPath)
 	}
 
 	for i, f := range toolchain.Files {
@@ -148,7 +152,20 @@ func replaceTaskID(uniqid string, toolchain *types.ToolChain) error {
 			toolchain.Files[i].RemoteRelativePath = strings.Replace(
 				f.RemoteRelativePath, toolchainTaskIDKey, uniqid, -1)
 		}
-	}
 
+		if relativeMode {
+			toolchain.Files[i].RemoteRelativePath = GetRelativeToolchainPath(f.LocalFullPath)
+		}
+	}
+	blog.Infof("basic: kkk try to render tool chain with ID: %s, toolchain:%+v", uniqid, *toolchain)
 	return nil
+}
+
+func GetRelativeToolchainPath(absPath string) string {
+	// handle windows toochain path
+	if index := strings.Index(absPath, ":"); index != -1 {
+		prefix := absPath[:index+1]
+		return strings.Replace(absPath, prefix, "toolchain", 1)
+	}
+	return absPath
 }

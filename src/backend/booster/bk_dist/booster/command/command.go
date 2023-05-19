@@ -64,6 +64,7 @@ const (
 	FlagBatchMode            = "batch_mode"
 	FlagDirectives           = "directives"
 	FlagGlobalSlots          = "global_slots"
+	FlagRelativeMode         = "relative_mode"
 	FlagSudoController       = "sudo_controller"
 	FlagIOTimeoutSecs        = "io_timeout_secs"
 	FlagPump                 = "pump"
@@ -274,6 +275,10 @@ var (
 		commandCli.BoolFlag{
 			Name:  "global_slots, gs",
 			Usage: "share global slots with other boosters",
+		},
+		commandCli.BoolFlag{
+			Name:  "relative_mode",
+			Usage: "use relative cmd on remote worker",
 		},
 		commandCli.BoolFlag{
 			Name:  "sudo_controller, sc",

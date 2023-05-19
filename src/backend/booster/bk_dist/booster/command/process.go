@@ -280,6 +280,7 @@ func newBooster(c *commandCli.Context) (*pkg.Booster, error) {
 			ToolChainJSONFile:    c.String(FlagToolChainJSONFile),
 			SupportDirectives:    c.Bool(FlagDirectives),
 			GlobalSlots:          c.Bool(FlagGlobalSlots),
+			RelativeMode:         c.Bool(FlagRelativeMode),
 			IOTimeoutSecs:        c.Int(FlagIOTimeoutSecs),
 			Pump:                 c.Bool(FlagPump),
 			PumpDisableMacro:     c.Bool(FlagPumpDisableMacro),

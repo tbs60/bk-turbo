@@ -192,6 +192,7 @@ type ControllerWorkSettings struct {
 	FilterRules     []FilterRuleItem
 	Degraded        bool
 	GlobalSlots     bool
+	RelativeMode    bool
 }
 
 // ControllerJobStats describe a single job's stats info

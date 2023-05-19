@@ -375,7 +375,7 @@ func (m *Mgr) SetToolChain(toolchain *types.ToolChain) error {
 		uniqid = fmt.Sprintf("toolchain_%s_%d",
 			util.RandomString(types.WorkIDLength), time.Now().Local().UnixNano())
 	}
-	_ = replaceTaskID(uniqid, toolchain)
+	_ = replaceTaskID(uniqid, toolchain, m.settings.RelativeMode)
 
 	// get local file list of tool chain
 	newfiles, err := getToolChainFiles(toolchain)

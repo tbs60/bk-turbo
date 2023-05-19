@@ -382,13 +382,14 @@ func saveFile(
 		rf.GetFullpath(), rf.GetTargetrelativepath(), rf.GetLinktarget())
 
 	inputfile = rf.GetFullpath()
-	relativepath := rf.GetTargetrelativepath()
+	relativepathRaw := rf.GetTargetrelativepath()
 	linkTarget := string(rf.GetLinktarget())
 	if inputfile == "" {
 		blog.Warnf("file [%s] path is empty!", rf.String())
 		return "", fmt.Errorf("file path is empty")
 	}
 
+	var relativepath string
 	if callback != nil {
 		relativepath, inputfile, _ = callback(inputfile, basedir, rf.GetTargetrelativepath())
 		if linkTarget != "" && !filepath.IsAbs(linkTarget) {
@@ -438,14 +439,22 @@ func saveFile(
 		return inputfile, nil
 	}
 
+	blog.Infof("kkk before mkdirAll , inputfile = %s, relative path = %s, raw relatviepath=%s", inputfile, relativepath, relativepathRaw)
+
 	dir := filepath.Dir(inputfile)
 	err = os.MkdirAll(dir, os.ModePerm)
 	if err != nil && !os.IsExist(err) {
 		blog.Errorf("create dir %s error: [%s]", dir, err.Error())
 		return "", err
 	}
-
 	blog.Debugf("succeed to create dir %s", dir)
+
+	// add by michealhe, replace abspath with relative path
+	if relativepathRaw != "" && !filepath.IsAbs(relativepath) {
+		inputfile = relativepath
+	}
+
+	blog.Infof("kkk after mkdirAll , inputfile = %s, relative path = %s, raw relatviepath=%s", inputfile, relativepath, relativepathRaw)
 
 	// we can't overwrite if file is readonly or running
 	// save as temp file if existed, then change name after saved
