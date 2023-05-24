@@ -56,6 +56,8 @@ type ServerConfig struct {
 
 	AgentReleaseCmds []string `json:"agent_release_cmd" value:"" usage:"locals cmds to release application"`
 
+	WorkerPriority string `json:"wokrer_priority" value:"Normal" usage:"define worker process priority"`
+
 	ServerCert *CertConfig // cert of the server
 }
 

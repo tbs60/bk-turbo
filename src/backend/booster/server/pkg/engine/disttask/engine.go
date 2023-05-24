@@ -112,7 +112,7 @@ type EngineConfig struct {
 	Brokers []config.EngineDisttaskBrokerConfig
 }
 
-//K8sClusterInfo define
+// K8sClusterInfo define
 type K8sClusterInfo struct {
 	K8SCRMClusterID      string
 	K8SCRMCPUPerInstance float64
@@ -950,10 +950,6 @@ func (de *disttaskEngine) releaseDirectTask(task *distTask) error {
 	}
 
 	for _, r := range resources {
-		// todokkk: 记录tasklist 插入和删除的时间
-		// todokkk: worker相对路径命令
-		// todokkk: 支持agent worker放在非c盘 ✅
-		// todokkk queue list ✅
 		if len(r.TaskList) > 1 {
 			blog.Infof("engine(%s) agent(%s) is still serving (%d) tasks(%v), not released",
 				EngineName, r.Base.IP, len(r.TaskList), r.TaskList)
@@ -1138,7 +1134,7 @@ type Message struct {
 	MessageRecordStats MessageRecordStats `json:"ccache_stats"`
 }
 
-//MessageType define
+// MessageType define
 type MessageType int
 
 const (
@@ -1226,7 +1222,7 @@ func (de *disttaskEngine) sendProjectMessage(projectID string, extra []byte) ([]
 	}
 }
 
-//EmptyJobs define
+// EmptyJobs define
 var EmptyJobs = compress.ToBase64String([]byte("[]"))
 
 func (de *disttaskEngine) sendMessageTaskStats(projectID string, stats MessageTaskStats) ([]byte, error) {
@@ -1404,7 +1400,7 @@ func getQueueNameHeader(queueName string) queueNameHeader {
 	}
 }
 
-//GetK8sInstanceKey get instance type from queueName
+// GetK8sInstanceKey get instance type from queueName
 func GetK8sInstanceKey(queueName string) *config.InstanceType {
 	header := getQueueNameHeader(queueName)
 	if header == queueNameHeaderK8SDefault || header == queueNameHeaderK8SWin {

@@ -301,7 +301,6 @@ func (d *directResourceManager) getFreeResource(
 
 		// 更新相应的free列表，减去已分配的资源
 		d.decAllocatedResource(userID, res)
-		blog.Infof("kkk get free res:[%v]", res[0])
 	}
 
 	blog.Infof("drm: getFreeResource with userID[%s] resBatchID[%s] condition[%+v] res[%+v]",
@@ -425,10 +424,6 @@ func (d *directResourceManager) listResource(userID string, resBatchID string) (
 		}
 	}
 
-	if len(ress) > 0 {
-		blog.Infof("kkk list resource[%v]", ress[0].Resource)
-	}
-
 	blog.Infof("drm: listResource with userID[%s] resBatchID[%s],ress[%s]",
 		userID, resBatchID, strings.Join(resips, " "))
 	return ress, nil
@@ -462,12 +457,6 @@ func (d *directResourceManager) setResourceAllocated(
 			v.allocated[resBatchID] = append(resarray, allocatedRess...)
 		}
 		v.allocatedLock.Unlock()
-	}
-
-	for task, res := range v.allocated {
-		if len(res) > 0 {
-			blog.Infof("kkk get task(%s) allocated[%s] ", task, res[0])
-		}
 	}
 
 	return nil
@@ -765,7 +754,6 @@ func (d *directResourceManager) notifyAllAgentRelease(userID, resBatchID string)
 		if len(agent.Agent.Allocated) > 0 {
 			//if len(agent.TaskList) == 0 {
 			for _, v := range agent.Agent.Allocated {
-				blog.Infof("kkk: (%s): ", ip, v.UserID, v.ResBatchID, userID, resBatchID)
 				if v.UserID == userID && v.ResBatchID == resBatchID {
 					for _, c := range v.Commands {
 						d.notifyAgentRelease(userID, resBatchID, ip, c.Cmd, c.ID, agent.Agent.getGOOS())
@@ -961,10 +949,6 @@ func (d *directResourceManager) getAndUpdate(resource *ReportAgentResource) (*on
 	oneagentres.Agent.Free = oneagentres.Agent.Total
 	oneagentres.WorkerReady = resource.WorkerReady
 	oneagentres.TaskList = []string{}
-
-	for _, v := range resource.Allocated {
-		blog.Infof("kkk get resource [%v]", v.AllocatedResource)
-	}
 
 	// 减去agent侧已经占用的资源
 	var oktaskid = make(map[string]string, 100)
@@ -1214,6 +1198,7 @@ func executeHandle(conn net.Conn, mgr *directResourceManager) {
 
 		if op == ws.OpClose || err == io.EOF {
 			blog.Errorf("execute handler: conn between (%s) is closed", remoteIP)
+			cp.Remove(remoteIP.String())
 			break
 		}
 		if op == ws.OpContinuation {
@@ -1242,6 +1227,7 @@ func reportHandle(conn net.Conn, mgr *directResourceManager) {
 
 		if op == ws.OpClose || err == io.EOF {
 			blog.Errorf("report resource handler: conn between (%s) is closed", remoteIP)
+			cp.Remove(remoteIP.String())
 			break
 		}
 		if op == ws.OpContinuation {

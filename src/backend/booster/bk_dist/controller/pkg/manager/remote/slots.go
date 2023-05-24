@@ -449,10 +449,6 @@ func (wr *resource) getWorkerWithMostFreeSlots(banWorkerList []*dcProtocol.Host)
 		}
 	}
 
-	for _, w := range wr.worker {
-		blog.Infof("kkk worker(%s) dead(%v) total(%d) occ(%d)", w.host.Server, w.dead, w.totalSlots, w.occupiedSlots)
-	}
-
 	// if w == nil {
 	// 	w = wr.worker[0]
 	// }

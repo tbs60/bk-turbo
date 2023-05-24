@@ -356,7 +356,7 @@ func (o *tcpManager) dealEnsureWorker(client *protocol.TCPClient, head *dcProtoc
 	if len(o.buffedcmds) > o.maxjobs {
 		ensureRsp = workerTypes.EnsureWorkerBusy
 	}
-	blog.Infof("kkk buffer len(%d) , max (%d)", len(o.buffedcmds), o.maxjobs)
+
 	o.bufflock.RUnlock()
 
 	return handler.Handle(client, head, nil, time.Now(), "", nil, ensureRsp)

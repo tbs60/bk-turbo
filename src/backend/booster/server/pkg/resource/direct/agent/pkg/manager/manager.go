@@ -36,6 +36,7 @@ import (
 	register_discover "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/register-discover"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
+	"golang.org/x/sys/windows"
 
 	localCommon "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/common"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct/agent/pkg/types"
@@ -588,6 +589,14 @@ func (o *processManager) startCommand(dir, cmdPath, processName string, params [
 		blog.Infof("succeed to run[%s %s] ,pid[%d]", processName, params, cmd.Process.Pid)
 	}
 
+	priority, ok := types.ProcessPriorityMap[o.conf.WorkerPriority]
+	if !ok {
+		blog.Errorf("process priority (%s) not supported", o.conf.WorkerPriority)
+		priority = windows.NORMAL_PRIORITY_CLASS
+	}
+
+	SetPriorityWindows(cmd.Process.Pid, priority)
+
 	if waitpid {
 		maxcounter := 3
 		index := 0
@@ -619,6 +628,21 @@ func (o *processManager) startCommand(dir, cmdPath, processName string, params [
 		return 0, err
 	}
 	return 0, nil
+}
+
+func SetPriorityWindows(pid int, priority uint32) error {
+	handle, err := windows.OpenProcess(types.PROCESS_ALL_ACCESS, false, uint32(pid))
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(handle) // Technically this can fail, but we ignore it
+
+	err = windows.SetPriorityClass(handle, priority)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // return error

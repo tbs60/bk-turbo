@@ -11,6 +11,8 @@ package types
 
 import (
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 // define const vars
@@ -199,4 +201,14 @@ var commandStatusTypeMap = map[CommandStatusType]string{
 	CommandStatusInit:    "init",
 	CommandStatusSucceed: "succeed",
 	CommandStatusFail:    "fail",
+}
+
+const PROCESS_ALL_ACCESS = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0xffff
+
+var ProcessPriorityMap = map[string]uint32{
+	"Normal":       windows.NORMAL_PRIORITY_CLASS,
+	"Above Normal": windows.ABOVE_NORMAL_PRIORITY_CLASS,
+	"High":         windows.HIGH_PRIORITY_CLASS,
+	"Below Normal": windows.BELOW_NORMAL_PRIORITY_CLASS,
+	"Low":          windows.IDLE_PRIORITY_CLASS,
 }

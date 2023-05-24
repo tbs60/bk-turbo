@@ -388,7 +388,6 @@ func (tc *taskBasicLayer) putTB(tb *engine.TaskBasic) {
 
 	queue := qg.GetQueue(tb.Client.QueueName)
 	exist := queue.Exist(tb.ID)
-	blog.Infof("kkk get tb  task(%s) queue(%s),status(%v),exist(%v)", tb.ID, tb.Client.QueueName, tb.Status.Status, exist)
 
 	// task in staging should be added into queue
 	if tb.Status.Status == engine.TaskStatusStaging {

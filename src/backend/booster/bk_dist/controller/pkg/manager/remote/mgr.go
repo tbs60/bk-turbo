@@ -1486,11 +1486,10 @@ func (m *Mgr) syncHostTime(hostList []*dcProtocol.Host) []*dcProtocol.Host {
 
 func (m *Mgr) getToolChainFromExecuteRequest(req *types.RemoteTaskExecuteRequest) []*types.FileCollectionInfo {
 	blog.Debugf("remote: get toolchain with req:[%+v]", *req)
-	blog.Infof("remote: kkk get toolchain with req:[%+v]", *req)
+
 	fd := make([]*types.FileCollectionInfo, 0, 2)
 	for _, c := range req.Req.Commands {
 		blog.Debugf("remote: ready get toolchain with key:[%s]", c.ExeToolChainKey)
-		blog.Infof("remote: kkk ready get toolchain with key:[%s]", c.ExeToolChainKey)
 		if c.ExeToolChainKey != "" {
 			toolchainfiles, timestamp, err := m.work.Basic().GetToolChainFiles(c.ExeToolChainKey)
 			if err == nil && len(toolchainfiles) > 0 {

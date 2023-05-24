@@ -89,7 +89,6 @@ func (s *selector) detectNewQueue() {
 
 	agentRes, err := egn.ListAgentInfo()
 	for _, agent := range agentRes {
-		blog.Infof("kkk detect agent get (%s) queue(%s)", agent.IP, agent.Cluster)
 		if agent.UpdatedAt.Add(1 * time.Minute).Before(time.Now()) {
 			continue
 		}

@@ -11,6 +11,7 @@ package basic
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	dcSDK "github.com/TencentBlueKing/bk-turbo/src/backend/booster/bk_dist/common/sdk"
@@ -137,14 +138,13 @@ func diffToolChainFiles(oldfs, newfs *[]dcSDK.FileDesc) (bool, string, error) {
 
 func replaceTaskID(uniqid string, toolchain *types.ToolChain, relativeMode bool) error {
 	blog.Debugf("basic: try to render tool chain with ID: %s, toolchain:%+v", uniqid, *toolchain)
-	blog.Infof("basic: kkk try to render tool chain with ID: %s, toolchain:%+v", uniqid, *toolchain)
 	if strings.Contains(toolchain.ToolRemoteRelativePath, toolchainTaskIDKey) {
 		toolchain.ToolRemoteRelativePath = strings.Replace(
 			toolchain.ToolRemoteRelativePath, toolchainTaskIDKey, uniqid, -1)
 	}
 
 	if relativeMode {
-		toolchain.ToolRemoteRelativePath = GetRelativeToolchainPath(toolchain.ToolLocalFullPath)
+		toolchain.ToolRemoteRelativePath = GetRelativeToolchainDir(toolchain.ToolLocalFullPath)
 	}
 
 	for i, f := range toolchain.Files {
@@ -154,18 +154,18 @@ func replaceTaskID(uniqid string, toolchain *types.ToolChain, relativeMode bool)
 		}
 
 		if relativeMode {
-			toolchain.Files[i].RemoteRelativePath = GetRelativeToolchainPath(f.LocalFullPath)
+			toolchain.Files[i].RemoteRelativePath = GetRelativeToolchainDir(f.LocalFullPath)
 		}
 	}
-	blog.Infof("basic: kkk try to render tool chain with ID: %s, toolchain:%+v", uniqid, *toolchain)
+
 	return nil
 }
 
-func GetRelativeToolchainPath(absPath string) string {
-	// handle windows toochain path
-	if index := strings.Index(absPath, ":"); index != -1 {
-		prefix := absPath[:index+1]
-		return strings.Replace(absPath, prefix, "toolchain", 1)
+func GetRelativeToolchainDir(absPath string) string {
+	dir := filepath.Dir(absPath)
+	if index := strings.Index(dir, ":"); index != -1 {
+		prefix := dir[:index+1]
+		return strings.Replace(dir, prefix, "toolchain", 1)
 	}
-	return absPath
+	return dir
 }
