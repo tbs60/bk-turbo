@@ -589,13 +589,10 @@ func (o *processManager) startCommand(dir, cmdPath, processName string, params [
 		blog.Infof("succeed to run[%s %s] ,pid[%d]", processName, params, cmd.Process.Pid)
 	}
 
-	priority, ok := types.ProcessPriorityMap[o.conf.WorkerPriority]
-	if !ok {
-		blog.Errorf("process priority (%s) not supported", o.conf.WorkerPriority)
-		priority = windows.NORMAL_PRIORITY_CLASS
+	if !o.detectWorker() {
+		time.Sleep(3 * time.Second)
 	}
-
-	SetPriorityWindows(cmd.Process.Pid, priority)
+	o.setWorkerPriority()
 
 	if waitpid {
 		maxcounter := 3
@@ -613,19 +610,56 @@ func (o *processManager) startCommand(dir, cmdPath, processName string, params [
 			}
 			index++
 		}
-
-		// // to ensure the process has running
-		// processID := strconv.Itoa(cmd.Process.Pid)
-		// existed := o.processExistedByNameAndPid(processName, processID)
-		// if existed {
-		// 	return cmd.Process.Pid, nil
-		// }
-
-		// err = fmt.Errorf("not found running process for[%s %s]", processName, processID)
-		// blog.Infof("%v", err)
-		// return 0, err
-		// do not check process name now, for it does not exist for *.bat
 		return 0, err
+	}
+
+	return 0, nil
+}
+
+func (o *processManager) setWorkerPriority() {
+	priority, ok := types.ProcessPriorityMap[o.conf.WorkerPriority]
+	if !ok {
+		blog.Errorf("process priority (%s) not supported", o.conf.WorkerPriority)
+		priority = windows.BELOW_NORMAL_PRIORITY_CLASS
+	}
+
+	pid, err := getWorkerPid()
+	if err != nil {
+		blog.Warnf("get worker pid failed: ", err)
+		return
+	}
+
+	blog.Infof("ready to set process pid(%v) priority :(%v) from config priority(%s)",
+		pid, priority, o.conf.WorkerPriority)
+	if pid > 0 {
+		SetPriorityWindows(pid, priority)
+		blog.Infof("set process pid(%v) priority :%v", pid, priority)
+	}
+}
+
+func getWorkerPid() (int, error) {
+	output, err := execCmd("tasklist")
+	if err != nil {
+		blog.Warnf("exec tasklist failed: ", err)
+		return 0, err
+	}
+
+	res := strings.Split(string(output), "\n")
+	for _, s := range res {
+		if strings.Contains(s, types.WorkerProcessName) {
+			raw := strings.TrimPrefix(s, types.WorkerProcessName)
+			strs := strings.Fields(raw)
+			if len(strs) > 0 {
+				blog.Infof("kkk get pid string: ", strs[0])
+				pid, err := strconv.Atoi(strs[0])
+				if err != nil {
+					blog.Warnf("Atoi failed with err: ", err)
+					break
+				}
+				return pid, nil
+			}
+			break
+		}
 	}
 	return 0, nil
 }

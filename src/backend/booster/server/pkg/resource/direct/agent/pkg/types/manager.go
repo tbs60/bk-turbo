@@ -30,6 +30,7 @@ const (
 	AgentReportIntervalTime = 5 * time.Second
 	AgentConnCheckTime      = 15 * time.Second
 
+	WorkerProcessName   = "bk-dist-worker.exe"
 	FbuildVersionEnvKey = "FB_VERSION"
 )
 
