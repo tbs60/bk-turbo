@@ -76,3 +76,25 @@ type messageItem struct {
 	desc sdk.FileDesc
 	msg  []protocol.Message
 }
+
+func getCheckCmd(os string) *dcSDK.BKDistCommand {
+	cmd := &dcSDK.BKDistCommand{}
+	if os == "linux" {
+		cmd.Commands = append(cmd.Commands, dcSDK.BKCommand{
+			WorkDir: "/root",
+			ExePath: "",
+			ExeName: "env",
+			Params:  []string{},
+		})
+	} else if os == "windows" {
+		cmd.Commands = append(cmd.Commands, dcSDK.BKCommand{
+			WorkDir: "C:\\",
+			ExePath: "",
+			ExeName: "echo",
+			Params:  []string{"%COMPUTERNAME%"},
+		})
+	} else {
+		return nil
+	}
+	return cmd
+}

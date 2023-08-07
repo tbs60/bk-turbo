@@ -100,6 +100,43 @@ type resource struct {
 	waitingList *list.List
 }
 
+// GetContainerHostName get host name in container
+func (wr *resource) GetContainerHostName(host *dcProtocol.Host) string {
+	if host == nil {
+		return ""
+	}
+
+	wr.workerLock.RLock()
+	defer wr.workerLock.RUnlock()
+
+	for _, w := range wr.worker {
+		if !w.host.Equal(host) {
+			continue
+		}
+		return w.containerHostName
+	}
+	return ""
+}
+
+// SetContainerHostName get host name in container
+func (wr *resource) SetContainerHostName(host *dcProtocol.Host, name string) {
+	if host == nil {
+		return
+	}
+
+	wr.workerLock.Lock()
+	defer wr.workerLock.Unlock()
+
+	for _, w := range wr.worker {
+		if !w.host.Equal(host) {
+			continue
+		}
+		w.containerHostName = name
+		break
+	}
+	return
+}
+
 // reset with []*dcProtocol.Host
 // add new hosts and disable released hosts
 func (wr *resource) Reset(hl []*dcProtocol.Host) ([]*dcProtocol.Host, error) {
@@ -643,6 +680,7 @@ type worker struct {
 	largefiletotalsize  uint64
 	continuousNetErrors int
 	dead                bool
+	containerHostName   string
 }
 
 func (wr *worker) occupySlot() error {

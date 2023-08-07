@@ -13,7 +13,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -273,6 +275,7 @@ func (m *Mgr) Init() {
 	}
 
 	go m.workerCheck(ctx)
+	go m.checkHostName(ctx)
 
 	if m.conf.SendCork {
 		m.sendCorkChan = make(chan bool, 1000)
@@ -437,6 +440,103 @@ func (m *Mgr) workerCheck(ctx context.Context) {
 
 		}
 	}
+}
+
+func (m *Mgr) checkHostName(ctx context.Context) {
+	checkTick := 10 * time.Second
+	blog.Infof("remote: run container host name check tick for work: %s", m.work.ID())
+	ticker := time.NewTicker(checkTick)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			blog.Infof("remote: run container host name check for work(%s) canceled by context", m.work.ID())
+			return
+
+		case <-ticker.C:
+			for _, w := range m.resource.getWorkers() {
+				origin := m.resource.GetContainerHostName(w.host)
+				if origin == "" {
+					go m.initContainerHostName(w.host)
+				} else {
+					if !w.disabled && !w.dead {
+						go m.checkContainerHostName(w.host)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (m *Mgr) initContainerHostName(h *dcProtocol.Host) {
+	blog.Infof("remote: start to init (%s) host name  for work(%s)", h.Server, m.work.ID())
+	name, err := m.getContainerHostName(h)
+	if err != nil {
+		blog.Errorf("remote: init (%s) host name  for work(%s) failed: %v", h.Server, m.work.ID(), err)
+		name = ""
+	}
+	m.resource.SetContainerHostName(h, name)
+	blog.Infof("remote: finish to init (%s) host name(%s) for work(%s)", h.Server, name, m.work.ID())
+}
+
+func (m *Mgr) checkContainerHostName(h *dcProtocol.Host) {
+	origin := m.resource.GetContainerHostName(h)
+	if origin == "" {
+		return
+	}
+
+	blog.Infof("remote: ready to check (%s) host name with origin name (%s)", h.Server, origin)
+	n, err := m.getContainerHostName(h)
+	if err != nil {
+		blog.Warnf("remote: check (%s) host name  for work(%s)", h.Server, m.work.ID())
+		return
+	}
+	if n != origin {
+		blog.Errorf("remote: find worker(%s) host name change from (%s) to (%s), disable it", h.Server, origin, n)
+		m.resource.disableWorker(h)
+	}
+}
+
+func (m *Mgr) getContainerHostName(h *dcProtocol.Host) (string, error) {
+	cmd := getCheckCmd(runtime.GOOS)
+	if cmd == nil {
+		return "", fmt.Errorf("unsupport os to check container host: %s", runtime.GOOS)
+	}
+
+	handler := m.remoteWorker.Handler(0, nil, nil, nil)
+	result, err := handler.ExecuteTask(h, cmd)
+	if err != nil {
+		blog.Errorf("remote: get container host name from worker (%s) failed: %v", h.Server, err)
+		return "", err
+	}
+	if len(result.Results) < 1 {
+		blog.Errorf("remote: get container host name from worker (%s) failed with no result", h.Server)
+		return "", fmt.Errorf("get host name failed with no result")
+	}
+
+	if runtime.GOOS == "windows" {
+		return string(result.Results[0].OutputMessage), nil
+	}
+
+	envs := strings.Split(string(result.Results[0].OutputMessage), "\n")
+	for _, s := range envs {
+		if runtime.GOOS == "linux" {
+			if !strings.Contains(s, "HOSTNAME=") {
+				continue
+			}
+		} else if runtime.GOOS == "windows" {
+			if !strings.Contains(s, "COMPUTERNAME=") {
+				continue
+			}
+		}
+		tmp := strings.Split(s, "=")
+		if len(tmp) < 2 {
+			continue
+		}
+		return tmp[1], nil
+	}
+	return "", nil
 }
 
 // ExecuteTask run the task in remote worker and ensure the dependent files
