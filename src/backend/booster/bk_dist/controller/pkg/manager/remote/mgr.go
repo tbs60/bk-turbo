@@ -516,10 +516,6 @@ func (m *Mgr) getContainerHostName(h *dcProtocol.Host) (string, error) {
 		return "", fmt.Errorf("get host name failed with no result")
 	}
 
-	if runtime.GOOS == "windows" {
-		return string(result.Results[0].OutputMessage), nil
-	}
-
 	envs := strings.Split(string(result.Results[0].OutputMessage), "\n")
 	for _, s := range envs {
 		if runtime.GOOS == "linux" {
