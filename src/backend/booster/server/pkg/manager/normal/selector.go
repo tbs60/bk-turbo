@@ -172,7 +172,7 @@ func (s *selector) pick(egn engine.Engine, tqg *engine.TaskQueueGroup, queueName
 	tb.Status.Message = messageTaskStarting
 	if err = s.layer.UpdateTaskBasic(tb); err != nil {
 		blog.Errorf("selector: update task basic(%s) failed: %v", tb.ID, err)
-		_ = egn.ReleaseTask(tb.ID)
+		_ = egn.ReleaseTask(tb, tb.ID)
 		return
 	}
 

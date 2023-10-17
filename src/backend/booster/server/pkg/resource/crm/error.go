@@ -24,4 +24,6 @@ var (
 	ErrorBrokerParamNotFit          = fmt.Errorf("broker parameters not fit")
 	ErrorBrokerNotEnoughResources   = fmt.Errorf("broker not enough resources")
 	ErrorBrokeringUnderCoolingTime  = fmt.Errorf("broker under cooling time")
+	ErrorNotEnoughResources         = fmt.Errorf("not enough resources")
+	ErrorNotSubResources            = fmt.Errorf("not sub resources")
 )

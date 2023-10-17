@@ -135,6 +135,13 @@ type ContainerResourceConfig struct {
 	MysqlSkipEnsure  bool   `json:"crm_resource_mysql_skip_ensure"`
 
 	BcsAPIPool *net.ConnectPool
+
+	// set resource manage type
+	ManageType int `json:"crm_resource_manage_type" value:"0" usage:"0~normal 1~scale"`
+
+	ScaleCacheConfigs []ScaleCacheConfig `json:"scale_cache_configs"`
+
+	CustomKey string `json:"crm_custom_key" value:"" usage:"specified this to associate with resource manager"`
 }
 
 // K8sResourceConfig define new k8s with cluster list
@@ -223,6 +230,21 @@ type EngineDisttaskBrokerConfig struct {
 	JobPerInstance  int                           `json:"job_per_instance"`
 	Allow           string                        `json:"allow"`
 	Volumes         []EngineDisttaskBrokerVolumes `json:"volumes"`
+}
+
+// ScaleCacheConfig define the scale cache config.
+type ScaleCacheConfig struct {
+	User                string                        `json:"user" value:"" usage:"which engine use it, suhc as distcc disttask"`
+	Image               string                        `json:"image"`
+	Scene               string                        `json:"scene"`
+	City                string                        `json:"city"`
+	InstancePerResource int                           `json:"instance_per_resource" value:"1"`
+	ResourceNum         int                           `json:"resource_num" value:"3"`
+	IdleKeepSeconds     int                           `json:"idle_keep_seconds" value:"-1" usage:"seconds to keep with idle status before release"`
+	ReleaseLoop         bool                          `json:"release_loop" value:"false" usage:"whether release resource with loop until succeed"`
+	JobPerInstance      int                           `json:"job_per_instance"`
+	Allow               string                        `json:"allow" usage:"set allowed ip list"`
+	Volumes             []EngineDisttaskBrokerVolumes `json:"volumes"`
 }
 
 // EngineDisttaskBrokerVolumes describe the volumes for broker

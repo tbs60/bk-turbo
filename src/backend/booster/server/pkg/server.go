@@ -439,6 +439,7 @@ func (s *Server) initK8sResourceManagers() (k8sRm crm.ResourceManager,
 			}
 			confItem.Enable = k8sconfList.Enable
 			confItem.Operator = k8sconfList.Operator
+			confItem.CustomKey = key
 			//add node selector for sync resource
 			for _, queueName := range strings.Split(key, ",") {
 				queueName = strings.TrimSpace(queueName)

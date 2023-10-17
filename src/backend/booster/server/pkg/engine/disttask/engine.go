@@ -30,6 +30,7 @@ import (
 	op "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/crm/operator"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct"
 	respack "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/resource/direct"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 
 	"github.com/jinzhu/gorm"
 )
@@ -250,8 +251,8 @@ func (de *disttaskEngine) DegradeTask(taskID string) error {
 }
 
 // LaunchDone check if the launch is done
-func (de *disttaskEngine) LaunchDone(taskID string) (bool, error) {
-	return de.launchDone(taskID)
+func (de *disttaskEngine) LaunchDone(taskID string, tb *engine.TaskBasic) (bool, error) {
+	return de.launchDone(taskID, tb)
 }
 
 // CheckTask check task when running, failed with error, such as running timeout.
@@ -275,8 +276,8 @@ func (de *disttaskEngine) CollectTaskData(tb *engine.TaskBasic) error {
 }
 
 // ReleaseTask release task, shut down workers and free the resources.
-func (de *disttaskEngine) ReleaseTask(taskID string) error {
-	return de.releaseTask(taskID)
+func (de *disttaskEngine) ReleaseTask(tb *engine.TaskBasic, taskID string) error {
+	return de.releaseTask(tb, taskID)
 }
 
 // GetPreferences return the preferences
@@ -650,18 +651,36 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 
 	de.setTaskIstResource(task, queueName)
 
-	err = crmMgr.Launch(tb.ID, pureQueueName, func(availableInstance int) (int, error) {
-		if availableInstance < task.Operator.LeastInstance {
-			return 0, engine.ErrorNoEnoughResources
-		}
+	// TODO : call launch by resource manage type
+	switch tb.Client.GetResourceManageType() {
+	case types.ResourceManageScale:
+		blog.Infof("engine(%s) try launching crm task(%s) with scale", EngineName, tb.ID)
+		err = crmMgr.LaunchScale(tb.ID, pureQueueName, func(availableInstance int) (int, error) {
+			if availableInstance < task.Operator.LeastInstance {
+				return 0, engine.ErrorNoEnoughResources
+			}
 
-		if availableInstance > task.Operator.RequestInstance {
-			availableInstance = task.Operator.RequestInstance
-		}
+			if availableInstance > task.Operator.RequestInstance {
+				availableInstance = task.Operator.RequestInstance
+			}
 
-		task.Operator.Instance = availableInstance
-		return availableInstance, nil
-	})
+			task.Operator.Instance = availableInstance
+			return availableInstance, nil
+		})
+	default:
+		err = crmMgr.Launch(tb.ID, pureQueueName, func(availableInstance int) (int, error) {
+			if availableInstance < task.Operator.LeastInstance {
+				return 0, engine.ErrorNoEnoughResources
+			}
+
+			if availableInstance > task.Operator.RequestInstance {
+				availableInstance = task.Operator.RequestInstance
+			}
+
+			task.Operator.Instance = availableInstance
+			return availableInstance, nil
+		})
+	}
 	// add task into public queue
 	if err == engine.ErrorNoEnoughResources {
 		if publicQueue := de.getPublicQueueByQueueName(queueName); publicQueue != nil &&
@@ -672,6 +691,7 @@ func (de *disttaskEngine) launchCRMTask(task *distTask, tb *engine.TaskBasic, qu
 	}
 	if err != nil {
 		blog.Errorf("engine(%s) launch crm task(%s) failed: %v", EngineName, tb.ID, err)
+		// TODO : 如果这儿失败了，需要将任务状态置为failed，避免selector一直拉起这个任务，导致后面排队的任务没有机会执行
 		return err
 	}
 
@@ -688,7 +708,7 @@ func (de *disttaskEngine) degradeTask(taskID string) error {
 	return nil
 }
 
-func (de *disttaskEngine) launchDone(taskID string) (bool, error) {
+func (de *disttaskEngine) launchDone(taskID string, tb *engine.TaskBasic) (bool, error) {
 	task, err := de.getTask(taskID)
 	if err != nil {
 		blog.Errorf("engine(%s) try checking service info, get task(%s) failed: %v", EngineName, taskID, err)
@@ -704,7 +724,7 @@ func (de *disttaskEngine) launchDone(taskID string) (bool, error) {
 		return de.launchDirectDone(task)
 	}
 
-	return de.launchCRMDone(task)
+	return de.launchCRMDone(task, tb)
 }
 
 func (de *disttaskEngine) launchDirectDone(task *distTask) (bool, error) {
@@ -775,7 +795,7 @@ func (de *disttaskEngine) launchDirectDone(task *distTask) (bool, error) {
 	return true, nil
 }
 
-func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
+func (de *disttaskEngine) launchCRMDone(task *distTask, tb *engine.TaskBasic) (bool, error) {
 	crmMgr := de.getCrMgr(task.InheritSetting.QueueName)
 	if crmMgr == nil {
 		blog.Errorf("engine(%s) try launch crm task(%s) done failed: crmMgr is null", EngineName, task.ID)
@@ -792,29 +812,76 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 		return false, nil
 	}
 
-	info, err := crmMgr.GetServiceInfo(task.ID)
-	if err != nil {
-		blog.Errorf("engine(%s) try checking service info, get crm info(%s) failed: %v",
-			EngineName, task.ID, err)
-		return false, err
+	var status op.ServiceStatus
+
+	switch tb.Client.GetResourceManageType() {
+	case types.ResourceManageScale:
+		// TODO : new logic here
+		// TODO : how to obtain the service status now?
+		infos, err := crmMgr.GetServiceInfoScale(task.ID)
+		if err != nil {
+			blog.Errorf("engine(%s) try checking service info, get scale crm info(%s) failed: %v",
+				EngineName, task.ID, err)
+			return false, err
+		}
+
+		hasStage := false
+		workerList := make([]taskWorker, 0, 100)
+		for _, info := range infos {
+			for _, endpoints := range info.AvailableEndpoints {
+				servicePort, _ := endpoints.Ports[portsService]
+				statsPort, _ := endpoints.Ports[portsStats]
+
+				workerList = append(workerList, taskWorker{
+					CPU:        task.Operator.RequestCPUPerUnit,
+					Mem:        task.Operator.RequestMemPerUnit,
+					IP:         endpoints.IP,
+					Port:       servicePort,
+					StatsPort:  statsPort,
+					ResourceID: info.ResourceID,
+				})
+			}
+			if info.Status == crm.ServiceStatusStaging {
+				hasStage = true
+			}
+			status = info.Status
+		}
+
+		task.Workers = workerList
+		task.Stats.WorkerCount = len(task.Workers)
+		if hasStage {
+			status = crm.ServiceStatusStaging
+		}
+
+	default:
+		info, err := crmMgr.GetServiceInfo(task.ID)
+		if err != nil {
+			blog.Errorf("engine(%s) try checking service info, get crm info(%s) failed: %v",
+				EngineName, task.ID, err)
+			return false, err
+		}
+
+		workerList := make([]taskWorker, 0, 100)
+		for _, endpoints := range info.AvailableEndpoints {
+			servicePort, _ := endpoints.Ports[portsService]
+			statsPort, _ := endpoints.Ports[portsStats]
+
+			workerList = append(workerList, taskWorker{
+				CPU:       task.Operator.RequestCPUPerUnit,
+				Mem:       task.Operator.RequestMemPerUnit,
+				IP:        endpoints.IP,
+				Port:      servicePort,
+				StatsPort: statsPort,
+			})
+		}
+
+		task.Workers = workerList
+		task.Stats.WorkerCount = len(task.Workers)
+		status = info.Status
 	}
 
-	workerList := make([]taskWorker, 0, 100)
-	for _, endpoints := range info.AvailableEndpoints {
-		servicePort, _ := endpoints.Ports[portsService]
-		statsPort, _ := endpoints.Ports[portsStats]
-
-		workerList = append(workerList, taskWorker{
-			CPU:       task.Operator.RequestCPUPerUnit,
-			Mem:       task.Operator.RequestMemPerUnit,
-			IP:        endpoints.IP,
-			Port:      servicePort,
-			StatsPort: statsPort,
-		})
-	}
-
-	task.Workers = workerList
-	task.Stats.WorkerCount = len(task.Workers)
+	// task.Workers = workerList
+	// task.Stats.WorkerCount = len(task.Workers)
 	task.Stats.CPUTotal = float64(task.Stats.WorkerCount) * task.Operator.RequestCPUPerUnit
 	task.Stats.MemTotal = float64(task.Stats.WorkerCount) * task.Operator.RequestMemPerUnit
 
@@ -825,7 +892,7 @@ func (de *disttaskEngine) launchCRMDone(task *distTask) (bool, error) {
 		return false, err
 	}
 
-	if info.Status == crm.ServiceStatusStaging {
+	if status == crm.ServiceStatusStaging {
 		return false, nil
 	}
 
@@ -873,7 +940,7 @@ func (de *disttaskEngine) collectTaskData(tb *engine.TaskBasic) error {
 	return nil
 }
 
-func (de *disttaskEngine) releaseTask(taskID string) error {
+func (de *disttaskEngine) releaseTask(tb *engine.TaskBasic, taskID string) error {
 	task, err := de.getTask(taskID)
 	if err != nil {
 		blog.Errorf("engine(%s) try release task, get task(%s) failed: %v", EngineName, taskID, err)
@@ -997,10 +1064,8 @@ func (de *disttaskEngine) initBrokers() error {
 					BrokerName: brokerName,
 					Volumes:    volumes,
 				},
-				Instance: broker.Instance,
-				FitFunc: func(brokerParam, requestParam crm.ResourceParam) bool {
-					return brokerParam.City == requestParam.City && brokerParam.Image == requestParam.Image
-				},
+				Instance:        broker.Instance,
+				FitFunc:         crm.ParamCheck,
 				IdleKeepSeconds: broker.IdleKeepSeconds,
 				ReleaseLoop:     broker.ReleaseLoop,
 			}); err != nil {

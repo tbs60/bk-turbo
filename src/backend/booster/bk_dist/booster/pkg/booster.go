@@ -43,6 +43,7 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/common/version"
 	v2 "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/api/v2"
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/engine/disttask"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 
 	"github.com/shirou/gopsutil/process"
 )
@@ -190,6 +191,10 @@ func (b *Booster) GetApplyParam() *v2.ParamApply {
 	var r []byte
 	_ = codec.EncJSON(data, &r)
 
+	m := types.Message{
+		ResManageType: types.ResourceManageScale,
+	}
+
 	return &v2.ParamApply{
 		ProjectID:     b.config.ProjectID,
 		Scene:         b.config.Type.String(),
@@ -197,6 +202,7 @@ func (b *Booster) GetApplyParam() *v2.ParamApply {
 		ClientCPU:     runtime.NumCPU(),
 		ClientVersion: version.Version,
 		Extra:         string(r),
+		Message:       m.Encode(),
 	}
 }
 

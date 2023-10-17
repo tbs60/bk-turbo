@@ -186,7 +186,7 @@ func (ae *apisEngine) DegradeTask(taskID string) error {
 }
 
 // LaunchDone check if the launch is done
-func (ae *apisEngine) LaunchDone(taskID string) (bool, error) {
+func (ae *apisEngine) LaunchDone(taskID string, tb *engine.TaskBasic) (bool, error) {
 	return ae.launchDone(taskID)
 }
 
@@ -211,8 +211,8 @@ func (ae *apisEngine) CollectTaskData(tb *engine.TaskBasic) error {
 }
 
 // ReleaseTask release task, shut down workers and free the resources.
-func (ae *apisEngine) ReleaseTask(taskID string) error {
-	return ae.releaseTask(taskID)
+func (ae *apisEngine) ReleaseTask(tb *engine.TaskBasic, taskID string) error {
+	return ae.releaseTask(tb, taskID)
 }
 
 // GetPreferences return the preferences
@@ -493,7 +493,7 @@ func (ae *apisEngine) launchCRMTask(task *apisTask, tb *engine.TaskBasic, queueN
 	return nil
 }
 
-func (ae *apisEngine) releaseTask(taskID string) error {
+func (ae *apisEngine) releaseTask(tb *engine.TaskBasic, taskID string) error {
 	task, err := ae.getTask(taskID)
 	if err != nil {
 		blog.Errorf("engine(%s) try release task, get task(%s) failed: %v", EngineName, taskID, err)

@@ -32,6 +32,13 @@ import (
 	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 )
 
+// there are three types resource now:
+// 1. created directly with operator, it is one-to-one with task id
+// 2. created by broker, which will be attached to resource of type 1, it may be contain multiple instance,
+//    only one of this type resource be used by type 1
+// 3. created by scale cache, which will be attached to resource of type 1 too, it only contain one instance resource,
+//    so resource of type 1 will contain multiple resources of type 3
+
 //DefaultNamespace define default namespace for resourcemanager
 //const DefaultNamespace = "disttask"
 
@@ -102,18 +109,26 @@ type ResourceManager interface {
 	Run() error
 }
 
+type ScaleServiceInfo struct {
+	*op.ServiceInfo
+	ResourceID string
+}
+
 // HandlerWithUser define all operations supported by resource manager.
 type HandlerWithUser interface {
 	Init(resourceID string, param ResourceParam) error
 	Launch(resourceID, city string, function op.InstanceFilterFunction) error
+	LaunchScale(resourceID, city string, function op.InstanceFilterFunction) error
 	Scale(resourceID string, function op.InstanceFilterFunction) error
 	GetServiceInfo(resourceID string) (*op.ServiceInfo, error)
+	GetServiceInfoScale(resourceID string) ([]*ScaleServiceInfo, error)
 	IsServicePreparing(resourceID string) (bool, error)
 	Release(resourceID string) error
 	AddBroker(name string, strategyType StrategyType, strategy BrokerStrategy,
 		param BrokerParam) error
 	GetInstanceType(platform, group string) *config.InstanceType
 	GetNamespace() string
+	GetCache() *Cache
 }
 
 // ResourceParam describe the request parameters to container resource manager.
@@ -138,6 +153,10 @@ type ResourceParam struct {
 
 	// if it is a broker resource, then broker name should be specified
 	BrokerName string `json:"broker_name"`
+}
+
+func (r *ResourceParam) UniqKey() string {
+	return r.City + r.Image
 }
 
 const (
@@ -447,18 +466,39 @@ func (rm *resourceManager) trace(resourceID, user string) {
 	ticker := time.NewTicker(checkerTimeGap)
 	defer ticker.Stop()
 
+	hasScale := rm.hasScaleResources(resourceID)
 	for {
 		select {
 		case <-rm.ctx.Done():
 			blog.Warnf("crm: resource(%s) user(%s) trace done", resourceID, user)
 			return
 		case <-ticker.C:
-			if rm.isFinishDeploying(resourceID, user) {
-				blog.Infof("crm: resource(%s) user(%s) finish deploying, checker exit", resourceID, user)
-				return
+			if hasScale {
+				if rm.isFinishDeployingScale(resourceID, user) {
+					blog.Infof("crm: scale resource(%s) user(%s) finish deploying, checker exit", resourceID, user)
+					return
+				}
+			} else {
+				if rm.isFinishDeploying(resourceID, user) {
+					blog.Infof("crm: resource(%s) user(%s) finish deploying, checker exit", resourceID, user)
+					return
+				}
 			}
 		}
 	}
+}
+
+func (rm *resourceManager) hasScaleResources(resourceID string) bool {
+	r, err := rm.getResources(resourceID)
+	if err != nil {
+		return false
+	}
+
+	if len(r.scalableResourceIDs) > 0 {
+		return true
+	}
+
+	return false
 }
 
 func (rm *resourceManager) isFinishDeploying(resourceID, user string) bool {
@@ -482,6 +522,32 @@ func (rm *resourceManager) isFinishDeploying(resourceID, user string) bool {
 	default:
 		return false
 	}
+}
+
+// ensure all sub resources finished
+func (rm *resourceManager) isFinishDeployingScale(resourceID, user string) bool {
+	// TODO : optimize later, should query which not finished here
+	infos, err := rm.getServiceInfoScale(resourceID, user)
+
+	// if resource no exist, means target service already deleted, just finish the deploying trace.
+	if err == ErrorResourceNoExist {
+		return true
+	}
+
+	if err != nil {
+		blog.Errorf("crm: check if scale resource(%s) user(%s) is finish deploying, "+
+			"get server status failed: %v, exit", resourceID, user, err)
+		return false
+	}
+
+	finisheded := true
+	for _, info := range infos {
+		if info.Status != ServiceStatusRunning && info.Status != ServiceStatusFailed {
+			finisheded = false
+		}
+	}
+
+	return finisheded
 }
 
 func (rm *resourceManager) freshDeployingStatus(resourceID, user string, ready int, terminated bool) {
@@ -532,9 +598,12 @@ func (rm *resourceManager) registerUser(user string) (HandlerWithUser, error) {
 
 	_, ok := rm.handlerMap[user]
 	if !ok {
+		cache := NewCache(rm.conf.Operator, rm.conf.CustomKey, user, rm, rm.conf.ScaleCacheConfigs)
+		cache.Run()
 		rm.handlerMap[user] = &handlerWithUser{
-			user: user,
-			mgr:  rm,
+			user:  user,
+			mgr:   rm,
+			cache: cache,
 		}
 	}
 
@@ -696,6 +765,75 @@ func (rm *resourceManager) getServiceInfo(resourceID, user string) (*op.ServiceI
 	return info, nil
 }
 
+func (rm *resourceManager) getServiceInfoScale(resourceID, user string) ([]*ScaleServiceInfo, error) {
+	if !rm.running {
+		return nil, ErrorManagerNotRunning
+	}
+
+	// TODO : implement here
+	r, err := rm.getResources(resourceID)
+	if err != nil {
+		blog.Errorf("crm: get resource(%s) user(%s) failed: %v",
+			resourceID, user, err)
+		return nil, err
+	}
+
+	subResourceLen := len(r.scalableResourceIDs)
+	if subResourceLen <= 0 {
+		blog.Errorf("crm: not found sub resources for resource(%s) user(%s)",
+			resourceID, user)
+		return nil, ErrorNotSubResources
+	}
+
+	// call getServiceInfo with multi-routine
+	type result struct {
+		info *op.ServiceInfo
+		id   string
+		err  error
+	}
+	resultchan := make(chan result, subResourceLen)
+	for _, id := range r.scalableResourceIDs {
+		go func(pid, puser string) {
+			info, err := rm.getServiceInfo(pid, puser)
+			resultchan <- result{
+				info: info,
+				id:   pid,
+				err:  err,
+			}
+		}(id, user)
+	}
+
+	// check all routine result
+	infos := make([]*ScaleServiceInfo, 0)
+	for i := 0; i < subResourceLen; i++ {
+		tempresult := <-resultchan
+		if tempresult.err != nil {
+			err = tempresult.err
+			continue
+		}
+
+		infos = append(infos, &ScaleServiceInfo{tempresult.info, tempresult.id})
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO : freshDeployingStatus main resource now
+	terminated := true
+	readyinstance := 0
+	for _, info := range infos {
+		readyinstance += info.CurrentInstances
+		if info.Status != ServiceStatusRunning && info.Status != ServiceStatusFailed {
+			terminated = false
+		}
+	}
+
+	rm.freshDeployingStatus(resourceID, user, readyinstance, terminated)
+
+	return infos, nil
+}
+
 func (rm *resourceManager) isServicePreparing(resourceID, user string) (bool, error) {
 	if !rm.running {
 		return false, ErrorManagerNotRunning
@@ -750,6 +888,80 @@ func (rm *resourceManager) releaseNoReadyInstance(key string, instance int) {
 			break
 		}
 	}
+}
+
+func (rm *resourceManager) updateWithSubResources(r *resource, ids []string) error {
+	r.scalableResourceIDs = ids
+	for _, id := range ids {
+		subr, err := rm.getResources(id)
+		if err != nil {
+			blog.Errorf("crm: update resource with sub resources, get resource(%s) failed: %v",
+				id, err)
+			continue
+		}
+		r.resourceBlockKey = subr.resourceBlockKey
+		r.noReadyInstance += subr.noReadyInstance
+	}
+
+	return nil
+}
+
+func (rm *resourceManager) launchScale(
+	resourceID, user, city string,
+	function op.InstanceFilterFunction,
+	useBroker bool) error {
+
+	if !rm.running {
+		return ErrorManagerNotRunning
+	}
+
+	// TODO : implement new  here
+	r, err := rm.getResources(resourceID)
+	if err != nil {
+		blog.Errorf("crm: try launching scale service, get resource(%s) for user(%s) failed: %v",
+			resourceID, user, err)
+		return err
+	}
+
+	// specify target city
+	originCity := r.param.City
+	if city != "" {
+		r.param.City = city
+	}
+
+	// get resource ids by cache api
+	handler, ok := rm.handlerMap[user]
+	if !ok {
+		blog.Errorf("crm: try get free instances for resource(%s) user(%s), get handlerMap nil", resourceID, user)
+		return fmt.Errorf("handlerMap nil")
+	}
+
+	ids, err := handler.GetCache().Apply(r.param, function)
+	if err != nil {
+		return err
+	}
+
+	// update and save resource info
+	rm.updateWithSubResources(r, ids)
+	r.status = resourceStatusDeploying
+	if err = rm.saveResources(r); err != nil {
+		blog.Errorf("crm: try launching service, save resource(%s) for user(%s) failed: %v",
+			resourceID, user, err)
+
+		// if save resource failed, clean the dirty data in noReadyInstance
+		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+		return err
+	}
+
+	// start trace this resource status
+	go rm.trace(resourceID, user)
+	blog.Infof(
+		"crm: success to launch service with resource(%s) instance(%d) "+
+			"for user(%s) in city(%s) from originCity(%s)",
+		resourceID, r.requestInstance, user, r.param.City, originCity,
+	)
+
+	return nil
 }
 
 func (rm *resourceManager) launch(
@@ -809,47 +1021,10 @@ func (rm *resourceManager) launch(
 	}
 
 	if !hasBroker {
-		condition := map[string]string{
-			op.AttributeKeyCity:     r.param.City,
-			op.AttributeKeyPlatform: r.param.Platform,
-		}
-		instance, key, err := rm.getFreeInstances(condition, function)
-		if err == engine.ErrorNoEnoughResources || err == ErrorBrokerNotEnoughResources {
-			return err
-		}
+		err = rm.launchByOperator(resourceID, user, r, function)
 		if err != nil {
-			blog.Errorf("crm: try get free instances for resource(%s) user(%s) failed: %v",
-				resourceID, user, err)
 			return err
 		}
-		if _, ok := rm.handlerMap[user]; !ok {
-			blog.Errorf("crm: try get free instances for resource(%s) user(%s), get handlerMap nil", resourceID, user)
-			return fmt.Errorf("handlerMap nil")
-		}
-
-		r.noReadyInstance = instance
-		r.resourceBlockKey = key
-
-		blog.Infof("crm: try to launch service with resource(%s) instance(%d) for user(%s)",
-			resourceID, instance, user)
-		if err = rm.operator.LaunchServer(rm.conf.BcsClusterID, op.BcsLaunchParam{
-			Name:               resourceID,
-			Namespace:          rm.handlerMap[user].GetNamespace(),
-			AttributeCondition: condition,
-			Env:                r.param.Env,
-			Ports:              r.param.Ports,
-			Volumes:            r.param.Volumes,
-			Image:              r.param.Image,
-			Instance:           instance,
-		}); err != nil {
-			blog.Errorf("crm: launch service with resource(%s) for user(%s) failed: %v", resourceID, user, err)
-
-			// if launch failed, clean the dirty data in noReadyInstance
-			go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
-			return err
-		}
-
-		r.requestInstance = instance
 	}
 
 	r.status = resourceStatusDeploying
@@ -869,6 +1044,54 @@ func (rm *resourceManager) launch(
 			"for user(%s) in city(%s) from originCity(%s)",
 		resourceID, r.requestInstance, user, r.param.City, originCity,
 	)
+	return nil
+}
+
+func (rm *resourceManager) launchByOperator(
+	resourceID, user string,
+	r *resource,
+	function op.InstanceFilterFunction) error {
+	condition := map[string]string{
+		op.AttributeKeyCity:     r.param.City,
+		op.AttributeKeyPlatform: r.param.Platform,
+	}
+	instance, key, err := rm.getFreeInstances(condition, function)
+	if err == engine.ErrorNoEnoughResources || err == ErrorBrokerNotEnoughResources {
+		return err
+	}
+	if err != nil {
+		blog.Errorf("crm: try get free instances for resource(%s) user(%s) failed: %v",
+			resourceID, user, err)
+		return err
+	}
+	if _, ok := rm.handlerMap[user]; !ok {
+		blog.Errorf("crm: try get free instances for resource(%s) user(%s), get handlerMap nil", resourceID, user)
+		return fmt.Errorf("handlerMap nil")
+	}
+
+	r.noReadyInstance = instance
+	r.resourceBlockKey = key
+
+	blog.Infof("crm: try to launch service with resource(%s) instance(%d) for user(%s)",
+		resourceID, instance, user)
+	if err = rm.operator.LaunchServer(rm.conf.BcsClusterID, op.BcsLaunchParam{
+		Name:               resourceID,
+		Namespace:          rm.handlerMap[user].GetNamespace(),
+		AttributeCondition: condition,
+		Env:                r.param.Env,
+		Ports:              r.param.Ports,
+		Volumes:            r.param.Volumes,
+		Image:              r.param.Image,
+		Instance:           instance,
+	}); err != nil {
+		blog.Errorf("crm: launch service with resource(%s) for user(%s) failed: %v", resourceID, user, err)
+
+		// if launch failed, clean the dirty data in noReadyInstance
+		go rm.releaseNoReadyInstance(r.resourceBlockKey, r.noReadyInstance)
+		return err
+	}
+
+	r.requestInstance = instance
 	return nil
 }
 
@@ -1094,6 +1317,13 @@ func (rm *resourceManager) runBrokerChecker() {
 type handlerWithUser struct {
 	user string
 	mgr  *resourceManager
+
+	cache *Cache
+}
+
+// GetCache
+func (hwu *handlerWithUser) GetCache() *Cache {
+	return hwu.cache
 }
 
 // Init
@@ -1106,6 +1336,17 @@ func (hwu *handlerWithUser) Launch(resourceID, city string, function op.Instance
 	return hwu.mgr.launch(hwu.resourceID(resourceID), hwu.user, city, function, true)
 }
 
+// LaunchScale
+func (hwu *handlerWithUser) LaunchScale(resourceID, city string, function op.InstanceFilterFunction) error {
+	// TODO : only support k8s firstly, support mac later
+	if hwu.mgr.conf.ManageType != int(types.ResourceManageScale) ||
+		hwu.mgr.conf.Operator != config.CRMOperatorK8S {
+		return hwu.mgr.launch(hwu.resourceID(resourceID), hwu.user, city, function, true)
+	}
+
+	return hwu.mgr.launchScale(hwu.resourceID(resourceID), hwu.user, city, function, true)
+}
+
 // Scale
 func (hwu *handlerWithUser) Scale(resourceID string, function op.InstanceFilterFunction) error {
 	return hwu.mgr.scale(hwu.resourceID(resourceID), hwu.user, function)
@@ -1114,6 +1355,23 @@ func (hwu *handlerWithUser) Scale(resourceID string, function op.InstanceFilterF
 // GetServiceInfo
 func (hwu *handlerWithUser) GetServiceInfo(resourceID string) (*op.ServiceInfo, error) {
 	return hwu.mgr.getServiceInfo(hwu.resourceID(resourceID), hwu.user)
+}
+
+// GetServiceInfoScale
+func (hwu *handlerWithUser) GetServiceInfoScale(resourceID string) ([]*ScaleServiceInfo, error) {
+	// TODO : only support k8s firstly, support mac later
+	if hwu.mgr.conf.ManageType != int(types.ResourceManageScale) ||
+		hwu.mgr.conf.Operator != config.CRMOperatorK8S {
+		info, err := hwu.mgr.getServiceInfo(hwu.resourceID(resourceID), hwu.user)
+		infopack := &ScaleServiceInfo{info, ""}
+		if err == nil {
+			return []*ScaleServiceInfo{infopack}, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	return hwu.mgr.getServiceInfoScale(hwu.resourceID(resourceID), hwu.user)
 }
 
 // IsServicePreparing
@@ -1186,6 +1444,9 @@ type resource struct {
 	// then the brokerResourceID is the resourceID of the broker resource, or it is empty
 	brokerResourceID string
 
+	// save scalable resource ids
+	scalableResourceIDs []string
+
 	// if this resource is a broker resource,
 	// then the brokerName is the name of this broker, or it is empty
 	brokerName string
@@ -1224,17 +1485,19 @@ func table2Resource(tr *TableResource) *resource {
 	var param ResourceParam
 	_ = codec.DecJSON([]byte(tr.Param), &param)
 
+	id, idarr := decodeResourceIDs(tr.BrokerResourceID)
 	return &resource{
-		resourceID:       tr.ResourceID,
-		user:             tr.User,
-		param:            param,
-		resourceBlockKey: tr.ResourceBlockKey,
-		noReadyInstance:  tr.NoReadyInstance,
-		requestInstance:  tr.RequestInstance,
-		status:           resourceStatus(tr.Status),
-		brokerResourceID: tr.BrokerResourceID,
-		brokerName:       tr.BrokerName,
-		brokerSold:       tr.BrokerSold,
+		resourceID:          tr.ResourceID,
+		user:                tr.User,
+		param:               param,
+		resourceBlockKey:    tr.ResourceBlockKey,
+		noReadyInstance:     tr.NoReadyInstance,
+		requestInstance:     tr.RequestInstance,
+		status:              resourceStatus(tr.Status),
+		brokerResourceID:    id,
+		brokerName:          tr.BrokerName,
+		brokerSold:          tr.BrokerSold,
+		scalableResourceIDs: idarr,
 
 		// TODO: 应该将时间节点存入db, 当前先用从db获取的时间.
 		initTime: time.Now().Local(),
@@ -1253,7 +1516,7 @@ func resource2Table(r *resource) *TableResource {
 		NoReadyInstance:  r.noReadyInstance,
 		RequestInstance:  r.requestInstance,
 		Status:           int(r.status),
-		BrokerResourceID: r.brokerResourceID,
+		BrokerResourceID: encodeBrokerResourceID(r.brokerResourceID, r.scalableResourceIDs),
 		BrokerName:       r.brokerName,
 		BrokerSold:       r.brokerSold,
 	}

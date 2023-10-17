@@ -162,7 +162,7 @@ func (fe *fastbuildEngine) DegradeTask(taskID string) error {
 }
 
 // check if the launch is done
-func (fe *fastbuildEngine) LaunchDone(taskID string) (bool, error) {
+func (fe *fastbuildEngine) LaunchDone(taskID string, tb *engine.TaskBasic) (bool, error) {
 	return fe.launchDone(taskID)
 }
 
@@ -216,8 +216,8 @@ func (fe *fastbuildEngine) CollectTaskData(tb *engine.TaskBasic) error {
 }
 
 // release task, shut down workers and free the resources.
-func (fe *fastbuildEngine) ReleaseTask(taskID string) error {
-	return fe.releaseTask(taskID)
+func (fe *fastbuildEngine) ReleaseTask(tb *engine.TaskBasic, taskID string) error {
+	return fe.releaseTask(tb, taskID)
 }
 
 func (fe *fastbuildEngine) consumeResource(tb *engine.TaskBasic, queueName string) error {
@@ -435,7 +435,7 @@ func userDefineID(taskID string, index int) string {
 	return fmt.Sprintf("%s_%s_%d", EngineName, taskID, index)
 }
 
-func (fe *fastbuildEngine) releaseTask(taskID string) error {
+func (fe *fastbuildEngine) releaseTask(tb *engine.TaskBasic, taskID string) error {
 	blog.Infof("engine(%s) try to release task(%s)", EngineName, taskID)
 	task, err := fe.getTask(taskID)
 	if err != nil {

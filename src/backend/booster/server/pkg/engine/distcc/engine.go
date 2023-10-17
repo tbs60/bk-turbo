@@ -202,7 +202,7 @@ func (de *distccEngine) DegradeTask(taskID string) error {
 }
 
 // LaunchDone check if the launch is done
-func (de *distccEngine) LaunchDone(taskID string) (bool, error) {
+func (de *distccEngine) LaunchDone(taskID string, tb *engine.TaskBasic) (bool, error) {
 	return de.launchDone(taskID)
 }
 
@@ -227,8 +227,8 @@ func (de *distccEngine) CollectTaskData(tb *engine.TaskBasic) error {
 }
 
 // ReleaseTask release task, shut down workers and free the resources.
-func (de *distccEngine) ReleaseTask(taskID string) error {
-	return de.releaseTask(taskID)
+func (de *distccEngine) ReleaseTask(tb *engine.TaskBasic, taskID string) error {
+	return de.releaseTask(tb, taskID)
 }
 
 // GetPreferences return the preferences
@@ -731,7 +731,7 @@ func (de *distccEngine) collectStatsInfo(uri string) (*ds.StatsInfo, error) {
 	return stats, nil
 }
 
-func (de *distccEngine) releaseTask(taskID string) error {
+func (de *distccEngine) releaseTask(tb *engine.TaskBasic, taskID string) error {
 	task, err := de.getTask(taskID)
 	if err != nil {
 		blog.Errorf("engine(%s) try release task, get task(%s) failed: %v", EngineName, taskID, err)

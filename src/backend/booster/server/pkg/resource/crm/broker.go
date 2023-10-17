@@ -682,3 +682,7 @@ func (dbs *constBrokerStrategy) Ask(param interface{}) int {
 func blockName(name, user string) string {
 	return strings.ReplaceAll(fmt.Sprintf("%s-%s", user, name), "_", "-")
 }
+
+func ParamCheck(brokerParam, requestParam ResourceParam) bool {
+	return brokerParam.City == requestParam.City && brokerParam.Image == requestParam.Image
+}

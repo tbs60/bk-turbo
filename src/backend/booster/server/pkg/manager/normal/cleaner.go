@@ -120,7 +120,7 @@ func (c *cleaner) clean(taskID string, egn engine.Engine, wg *sync.WaitGroup) {
 	}
 
 	blog.Infof("cleaner: try releasing task(%s)", taskID)
-	if err = egn.ReleaseTask(taskID); err != nil {
+	if err = egn.ReleaseTask(tb, taskID); err != nil {
 		blog.Errorf("cleaner: try releasing task(%s) failed: %v", taskID, err)
 		return
 	}

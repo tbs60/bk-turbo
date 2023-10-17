@@ -164,6 +164,8 @@ type taskWorker struct {
 	Port      int
 	StatsPort int
 	Message   string
+	// it will include multiple resource for one task
+	ResourceID string
 }
 
 type taskInheritSetting struct {

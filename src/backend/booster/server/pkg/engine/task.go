@@ -13,6 +13,7 @@ import (
 	"time"
 
 	selfMetric "github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/metric"
+	"github.com/TencentBlueKing/bk-turbo/src/backend/booster/server/pkg/types"
 )
 
 // TaskExtension describe the extension part beyond task basic according to different engines
@@ -186,6 +187,10 @@ type TaskBasicClient struct {
 	ClientVersion string
 	StageTimeout  int
 	Message       string
+}
+
+func (tbc *TaskBasicClient) GetResourceManageType() types.ResourceManageType {
+	return types.GetResourceType(tbc.Message)
 }
 
 // TaskBasicStatus describe task basic status

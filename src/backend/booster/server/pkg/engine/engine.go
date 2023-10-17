@@ -39,7 +39,7 @@ type Engine interface {
 	LaunchTask(tb *TaskBasic, queueName string) error
 
 	// LaunchDone is used to check if the launch job is done
-	LaunchDone(taskID string) (bool, error)
+	LaunchDone(taskID string, tb *TaskBasic) (bool, error)
 
 	// CheckTask let engine check this task status
 	CheckTask(tb *TaskBasic) error
@@ -63,7 +63,7 @@ type Engine interface {
 	CollectTaskData(tb *TaskBasic) error
 
 	// ReleaseTask tell engine to shutdown the service and release the resource
-	ReleaseTask(taskID string) error
+	ReleaseTask(tb *TaskBasic, taskID string) error
 
 	// GetPreferences return the engine preferences settings
 	GetPreferences() Preferences
