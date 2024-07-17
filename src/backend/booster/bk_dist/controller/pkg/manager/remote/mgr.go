@@ -514,6 +514,7 @@ func (m *Mgr) ExecuteTask(req *types.RemoteTaskExecuteRequest) (*types.RemoteTas
 
 	remoteDirs, err := m.ensureFilesWithPriority(handler, req.Pid, req.Sandbox, getFileDetailsFromExecuteRequest(req))
 	if err != nil {
+		req.BanWorkerList = append(req.BanWorkerList, req.Server)
 		blog.Errorf("remote: execute remote task for work(%s) from pid(%d) to server(%s), "+
 			"ensure files failed: %v", m.work.ID(), req.Pid, req.Server.Server, err)
 		return nil, err
